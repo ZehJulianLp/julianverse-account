@@ -89,6 +89,9 @@ def dav(connection, method, url, **kwargs):
         try:
             with httpx.Client(
                 auth=(connection.username, decrypt(connection.secret)),
+                # Apache's gzip representation adds an ETag suffix that cannot
+                # be used as the file's If-Match version on a later PUT.
+                headers={"Accept-Encoding": "identity"},
                 timeout=httpx.Timeout(6, connect=3),
                 follow_redirects=False,
                 trust_env=False,

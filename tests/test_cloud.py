@@ -173,6 +173,7 @@ def test_cloud_is_source_of_truth_and_conditional_writes(app, logged_in):
         assert db.session.scalar(db.select(SyncPreference)).last_sync
         # Content never lands in SQLite, including its schema.
         assert "data" not in SyncPreference.__table__.columns
+    assert all(call.request.headers["Accept-Encoding"] == "identity" for call in respx.calls)
 
 
 @respx.mock

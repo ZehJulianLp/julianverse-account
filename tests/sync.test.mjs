@@ -145,3 +145,93 @@ test("local editing during a download keeps the original ETag and detects the cl
   assert.equal(record.conflict.document.data, "other device");
   assert.equal(env.puts, 0);
 });
+
+test("JSON key order does not cause another upload or a conflict", async () => {
+  const { sdk, env } = environment();
+  const local = { theme: "dark", charts: { wind: true, rain: false } };
+  env.remote = {
+    data: { charts: { rain: false, wind: true }, theme: "dark" },
+    deleted: false,
+    schemaVersion: 1,
+  };
+  env.etag = '"same-file"';
+  await sdk.attach("token");
+  await sdk.enable("notes", { source: "local", localData: local });
+  const record = await sdk.sync("notes");
+  assert.equal(record.dirty, false);
+  assert.equal(record.conflict, null);
+  assert.equal(env.puts, 0);
+});
+
+for (const savedEtag of [
+  '"0123456789abcdef0123456789abcdef"',
+  '"0123456789abcdef0123456789abcdef-gzip"',
+]) {
+  test(`legacy compression conflict is repaired safely from ${savedEtag}`, async () => {
+    const { sdk, store, env } = environment();
+    const base = '"0123456789abcdef0123456789abcdef"';
+    env.remote = { schemaVersion: 1, data: { theme: "light" }, deleted: false };
+    env.etag = base;
+    await sdk.attach("token");
+    await sdk.enable("notes", { source: "cloud" });
+    await sdk.save("notes", { theme: "dark" });
+    const record = await sdk.read("notes");
+    record.etag = savedEtag;
+    record.conflict = {
+      document: structuredClone(env.remote),
+      etag: base.slice(0, -1) + '-gzip"',
+    };
+    await store.set(sdk.context("notes").key, record);
+    const repaired = await sdk.sync("notes");
+    assert.equal(repaired.conflict, null);
+    assert.equal(repaired.dirty, false);
+    assert.equal(env.puts, 1);
+    assert.deepEqual(env.remote.data, { theme: "dark" });
+  });
+}
+
+test("old gzip versions never hide a genuine remote edit", async () => {
+  const { sdk, store, env } = environment();
+  env.remote = { schemaVersion: 1, data: "original", deleted: false };
+  env.etag = '"0123456789abcdef0123456789abcdef-gzip"';
+  await sdk.attach("token");
+  await sdk.enable("notes", { source: "cloud" });
+  await sdk.save("notes", "local edit");
+  const record = await sdk.read("notes");
+  env.remote = { schemaVersion: 1, data: "cloud edit", deleted: false };
+  env.etag = '"fedcba9876543210fedcba9876543210"';
+  record.conflict = {
+    document: structuredClone(env.remote),
+    etag: env.etag.slice(0, -1) + '-gzip"',
+  };
+  await store.set(sdk.context("notes").key, record);
+  const result = await sdk.sync("notes");
+  assert.ok(result.conflict);
+  assert.equal(result.document.data, "local edit");
+  assert.equal(env.puts, 0);
+});
+
+test("stored conflicts clear if both copies are already identical; array order still matters", async () => {
+  const { sdk, env } = environment();
+  env.remote = {
+    schemaVersion: 1,
+    data: { places: ["A", "B"] },
+    deleted: false,
+  };
+  env.etag = '"original"';
+  await sdk.attach("token");
+  await sdk.enable("notes", { source: "cloud" });
+  await sdk.save("notes", { places: ["B", "A"] });
+  env.etag = '"newer"';
+  assert.ok((await sdk.sync("notes")).conflict);
+  env.remote = {
+    deleted: false,
+    data: { places: ["B", "A"] },
+    schemaVersion: 1,
+  };
+  const record = await sdk.sync("notes");
+  assert.equal(record.conflict, null);
+  assert.equal(record.dirty, false);
+  assert.equal(record.etag, env.etag);
+  assert.equal(env.puts, 0);
+});

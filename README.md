@@ -340,6 +340,13 @@ gespeichert. Ein offline ausgelöstes Abmelden stoppt sofort lokal und widerruft
 die App-Sitzung beim nächsten Kontakt. Andere Tabs derselben App werden gestoppt.
 App und Account müssen für diese Cookies auf derselben Site liegen.
 
+WebDAV verwendet `Accept-Encoding: identity`, damit Lesen und bedingtes Schreiben
+dieselbe Dateiversion verwenden. Der Inhaltsvergleich ignoriert die Reihenfolge
+von JSON-Objektschlüsseln, berücksichtigt aber die Reihenfolge in Arrays. Alte
+Konflikte verschwinden automatisch, wenn beide Inhalte gleich sind oder sich
+nachweislich nur die bekannte Apache-`-gzip`-Kennung derselben ownCloud-Version
+unterscheidet. Andere Versionskonflikte erfordern weiterhin eine Auswahl.
+
 Lesende ownCloud-Anfragen werden bei einem Transportfehler oder HTTP 502/503/504
 einmal wiederholt. Unsichere Schreibwiederholungen bleiben ausgeschlossen.
 
