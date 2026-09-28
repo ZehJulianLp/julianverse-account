@@ -65,7 +65,8 @@ def test_registration_requires_email_and_creates_no_sync(app, client):
     with app.app_context():
         user = db.session.scalar(db.select(User).where(User.username == "new-user"))
         assert not user.email_verified
-        assert not db.session.get(CloudConnection, user.id)
+        cloud = db.session.get(CloudConnection, user.id)
+        assert cloud.managed and cloud.state == "pending" and cloud.remote_enabled is None
         assert not db.session.scalar(
             db.select(BrowserSession).where(BrowserSession.user_id == user.id)
         )

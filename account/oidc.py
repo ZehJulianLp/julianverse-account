@@ -6,6 +6,7 @@ from authlib.oauth2.rfc6749 import InvalidGrantError, InvalidRequestError, OAuth
 from authlib.oauth2.rfc6749.grants import AuthorizationCodeGrant, RefreshTokenGrant
 from authlib.oauth2.rfc7009 import RevocationEndpoint
 from authlib.oauth2.rfc7636 import CodeChallenge
+from authlib.oauth2.rfc7662 import IntrospectionEndpoint
 from authlib.oidc.core import UserInfo
 from authlib.oidc.core.errors import ConsentRequiredError, LoginRequiredError
 from authlib.oidc.core.grants import OpenIDCode
@@ -13,6 +14,7 @@ from flask import (
     Blueprint,
     abort,
     current_app,
+    flash,
     g,
     redirect,
     render_template,
@@ -40,6 +42,7 @@ SCOPES = {
     "profile": "Anzeigename und Benutzername",
     "email": "E-Mail-Adresse und Bestätigungsstatus",
     "sync": "Freigegebene Sync-Dateien dieser App in ownCloud",
+    "owncloud": "Anmeldung bei deinem verknüpften ownCloud-Konto",
 }
 
 
@@ -159,6 +162,11 @@ class CodeGrant(AuthorizationCodeGrant):
 
     def authenticate_user(self, authorization_code):
         browser = db.session.get(BrowserSession, authorization_code.session_id)
+        if browser and self.request.client.slug == "owncloud":
+            from .provisioning import sso_username
+
+            if not sso_username(browser.user):
+                return None
         consent = db.session.scalar(
             db.select(Consent).where(
                 Consent.user_id == authorization_code.user_id,
@@ -205,6 +213,12 @@ def user_info(user, scope):
         result.update(name=user.display_name, preferred_username=user.username, locale=user.locale)
     if "email" in scopes:
         result.update(email=user.email, email_verified=user.email_verified)
+    if "owncloud" in scopes:
+        from .provisioning import sso_username
+
+        username = sso_username(user)
+        if username:
+            result["owncloud_username"] = username
     return result
 
 
@@ -266,6 +280,31 @@ class Revoke(RevocationEndpoint):
         revoke_family(token.family)
 
 
+class Introspect(IntrospectionEndpoint):
+    CLIENT_AUTH_METHODS = ["client_secret_basic", "client_secret_post"]
+
+    def query_token(self, value, hint):
+        return db.session.scalar(
+            db.select(OAuthToken).where(OAuthToken.access_hash == digest(value))
+        )
+
+    def check_permission(self, token, client, request):
+        return client.slug == "owncloud" and client.client_id == token.client_id
+
+    def introspect_token(self, token):
+        return dict(
+            active=True,
+            token_type="Bearer",
+            client_id=token.client_id,
+            sub=token.user_id,
+            aud=[token.client_id],
+            scope=token.scope,
+            iss=current_app.config["BASE_URL"],
+            iat=token.issued_at,
+            exp=token.issued_at + token.expires_in,
+        )
+
+
 def server():
     return current_app.extensions["authorization_server"]
 
@@ -278,6 +317,7 @@ def init_server(app):
     )
     authorization = AuthorizationServer(app, query_client, save_token)
     authorization.register_grant(CodeGrant, [PKCE(), OpenID(require_nonce=True)])
+    authorization.register_endpoint(Introspect)
     authorization.register_grant(RefreshGrant)
     authorization.register_endpoint(Revoke)
     app.extensions["authorization_server"] = authorization
@@ -322,6 +362,7 @@ def discovery():
         userinfo_endpoint=base + "/oauth/userinfo",
         jwks_uri=base + "/oauth/jwks",
         revocation_endpoint=base + "/oauth/revoke",
+        introspection_endpoint=base + "/oauth/introspect",
         response_types_supported=["code"],
         grant_types_supported=["authorization_code", "refresh_token"],
         subject_types_supported=["public"],
@@ -367,6 +408,15 @@ def authorize():
     if current_app.config["REQUIRE_VERIFIED_EMAIL"] and not g.user.email_verified:
         abort(403, "Bitte bestätige zuerst deine E-Mail-Adresse.")
     scope = grant.request.scope
+    if grant.request.client.slug == "owncloud":
+        from .provisioning import sso_username
+
+        if not sso_username(g.user):
+            flash(
+                "Dein Cloud-Zugang ist noch nicht bereit. Verknüpfe dein vorhandenes Konto oder warte auf die Einrichtung.",
+                "info",
+            )
+            return redirect(url_for("pages.connections"))
     consent = db.session.scalar(
         db.select(Consent).where(
             Consent.user_id == g.user.id, Consent.client_id == grant.request.client.client_id
@@ -471,3 +521,10 @@ def revoke():
         return "", 204
     rate_limit("revoke", 60, 300)
     return server().create_endpoint_response("revocation")
+
+
+@bp.post("/oauth/introspect")
+@csrf.exempt
+def introspect():
+    rate_limit("introspection", 300, 60)
+    return server().create_endpoint_response("introspection")

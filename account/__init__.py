@@ -55,6 +55,10 @@ def create_app(config=None):
             "OWNCLOUD_BASE_URL", "https://cloud.julianverse.de"
         ).rstrip("/"),
         OWNCLOUD_SYNC_ROOT=os.environ.get("OWNCLOUD_SYNC_ROOT", "Julianverse"),
+        OWNCLOUD_PROVISION_USER=os.environ.get("OWNCLOUD_PROVISION_USER", ""),
+        OWNCLOUD_PROVISION_PASSWORD=os.environ.get("OWNCLOUD_PROVISION_PASSWORD", ""),
+        OWNCLOUD_PROVISION_GROUP=os.environ.get("OWNCLOUD_PROVISION_GROUP", "julianverse-account"),
+        OWNCLOUD_SSO_ENABLED=boolean("OWNCLOUD_SSO_ENABLED"),
         DISCORD_CLIENT_ID=os.environ.get("DISCORD_CLIENT_ID", ""),
         DISCORD_CLIENT_SECRET=os.environ.get("DISCORD_CLIENT_SECRET", ""),
         MAIL_HOST=os.environ.get("MAIL_HOST", ""),
@@ -96,11 +100,11 @@ def create_app(config=None):
     migrate.init_app(app, db, render_as_batch=True)
     csrf.init_app(app)
 
-    from . import auth, cli, cloud, oidc, pages, passkeys
+    from . import admin, auth, cli, cloud, oidc, pages, passkeys
     from .security import load_user
 
     app.before_request(load_user)
-    for blueprint in (auth.bp, pages.bp, cloud.bp, oidc.bp, passkeys.bp):
+    for blueprint in (auth.bp, pages.bp, cloud.bp, oidc.bp, passkeys.bp, admin.bp):
         app.register_blueprint(blueprint)
     auth.init_discord(app)
     oidc.init_server(app)
@@ -113,6 +117,7 @@ def create_app(config=None):
             "base_url": app.config["BASE_URL"],
             "discord_enabled": bool(app.config["DISCORD_CLIENT_ID"]),
             "cloud_url": app.config["OWNCLOUD_BASE_URL"],
+            "cloud_sso_enabled": app.config["OWNCLOUD_SSO_ENABLED"],
             "year": datetime.now(timezone.utc).year,
         }
 

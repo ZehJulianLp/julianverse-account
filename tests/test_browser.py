@@ -21,9 +21,10 @@ def test_browser_login_mobile_and_real_passkey_flow(app):
     app.config.update(BASE_URL=origin, SERVER_NAME=f"localhost:{server.server_port}")
     callback = f"https://127.0.0.1:{server.server_port}/test-client-callback"
     from account.extensions import db
-    from account.models import Client
+    from account.models import Client, User
 
     with app.app_context():
+        db.session.scalar(db.select(User)).is_admin = True
         client = db.session.scalar(db.select(Client))
         metadata = dict(client.client_metadata)
         metadata["redirect_uris"] = [callback]
@@ -53,6 +54,17 @@ def test_browser_login_mobile_and_real_passkey_flow(app):
             page.wait_for_url("**/overview")
             assert page.get_by_role("heading", name="Hallo, Julian.").is_visible()
             page.screenshot(path=str(captures / "overview-desktop.png"), full_page=True)
+            page.get_by_role("link", name="Verwaltung", exact=True).click()
+            assert page.get_by_role("heading", name="Benutzer & Dienste").is_visible()
+            page.screenshot(path=str(captures / "admin-desktop.png"), full_page=True)
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            page.screenshot(path=str(captures / "admin-mobile.png"), full_page=True)
+            page.get_by_role("link", name="Verbindungen", exact=True).click()
+            assert page.get_by_role("button", name="Vorhandenes Konto verknüpfen").is_visible()
+            page.screenshot(path=str(captures / "cloud-mobile.png"), full_page=True)
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            page.set_viewport_size({"width": 1440, "height": 1050})
             page.get_by_role("link", name="Sicherheit", exact=True).click()
             cdp = context.new_cdp_session(page)
             cdp.send("WebAuthn.enable")

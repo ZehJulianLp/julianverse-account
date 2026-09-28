@@ -1,0 +1,12 @@
+[Unit]
+Description=Julianverse ownCloud account provisioning
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@ROOT@
+EnvironmentFile=@ROOT@/.env
+ExecStart=@ROOT@/.venv/bin/flask --app wsgi reconcile-cloud
+UMask=0077
+NoNewPrivileges=true
+TimeoutStartSec=10min

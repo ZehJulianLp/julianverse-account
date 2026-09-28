@@ -71,6 +71,10 @@ def init_app(app):
             raise click.ClickException(
                 "Zulässige Scopes: openid profile email sync; openid ist erforderlich."
             )
+        if "owncloud" in scope.split() and (slug != "owncloud" or public_client):
+            raise click.ClickException(
+                "Der ownCloud-Scope ist dem vertraulichen ownCloud-Client vorbehalten."
+            )
         for uri in redirects:
             parsed = urlsplit(uri)
             if (
@@ -120,12 +124,15 @@ def init_app(app):
     @click.argument("username")
     @click.option("--email", required=True)
     @click.option(
+        "--existing-cloud", is_flag=True, help="Vorhandenes Cloud-Konto später verknüpfen."
+    )
+    @click.option(
         "--verified",
         is_flag=True,
         help="Der Betreiber hat die Inhaberschaft der E-Mail bereits geprüft.",
     )
     @click.password_option(confirmation_prompt=True)
-    def create_user(username, email, verified, password):
+    def create_user(username, email, verified, password, existing_cloud):
         """Create an initial account interactively; never ship a default password."""
         from email_validator import EmailNotValidError, validate_email
 
@@ -147,8 +154,92 @@ def init_app(app):
         user = User(username=username, display_name=username, email=email, email_verified=verified)
         user.set_password(password)
         db.session.add(user)
+        if not existing_cloud:
+            from .provisioning import queue_new_cloud
+
+            queue_new_cloud(user)
         db.session.commit()
         click.echo("Konto erstellt. Sync bleibt ausgeschaltet.")
+
+    @app.cli.command("make-admin")
+    @click.argument("username")
+    def make_admin(username):
+        """Bootstrap an administrator from an existing verified account."""
+        from .models import AdminEvent, User
+
+        user = db.session.scalar(db.select(User).where(User.username == username))
+        if not user or not user.enabled or not user.email_verified:
+            raise click.ClickException("Aktives Konto mit bestätigter E-Mail erforderlich.")
+        if not user.is_admin:
+            user.is_admin = True
+            db.session.add(AdminEvent(target_id=user.id, action="cli-make-admin"))
+            db.session.commit()
+        click.echo("Adminrechte gesetzt.")
+
+    @app.cli.command("reconcile-cloud")
+    def reconcile_cloud():
+        """Process queued ownCloud accounts; suitable for a systemd timer."""
+        from .provisioning import reconcile_due
+
+        results = reconcile_due()
+        click.echo(
+            f"Cloud-Aufträge: {sum(ok for _, ok in results)} erfolgreich, "
+            f"{sum(not ok for _, ok in results)} noch ausstehend."
+        )
+
+    @app.cli.command("prepare-owncloud")
+    def prepare_owncloud():
+        """Write the private, idempotent setup bundle; never print credentials."""
+        import json
+
+        from .security import decrypt, encrypt
+
+        target = Path(app.instance_path) / "owncloud-setup.json"
+        client = db.session.scalar(db.select(Client).where(Client.slug == "owncloud"))
+        if target.exists():
+            bundle = json.loads(target.read_text())
+            if not client or not client.check_client_secret(decrypt(bundle["oidc_secret"])):
+                raise click.ClickException(
+                    "Setup-Datei und registrierter ownCloud-Client passen nicht zusammen."
+                )
+            click.echo("Vorhandene private ownCloud-Einrichtung wird weiterverwendet.")
+            return
+        if client:
+            raise click.ClickException(
+                "ownCloud-Client existiert bereits; keine Zugangsdaten überschrieben."
+            )
+        secret = secrets.token_urlsafe(48)
+        client = Client(
+            slug="owncloud",
+            client_id=secrets.token_urlsafe(24),
+            client_secret=digest(secret),
+            client_id_issued_at=now(),
+        )
+        client.set_client_metadata(
+            dict(
+                client_name="ownCloud",
+                redirect_uris=[
+                    app.config["OWNCLOUD_BASE_URL"] + "/index.php/apps/openidconnect/redirect"
+                ],
+                scope="openid profile email owncloud",
+                grant_types=["authorization_code", "refresh_token"],
+                response_types=["code"],
+                token_endpoint_auth_method="client_secret_basic",
+            )
+        )
+        db.session.add(client)
+        db.session.flush()
+        bundle = dict(
+            client_id=client.client_id,
+            oidc_secret=encrypt(secret),
+            provision_user="jv_account_provisioner",
+            provision_password=encrypt(secrets.token_urlsafe(48)),
+        )
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump(bundle, stream)
+        db.session.commit()
+        click.echo("ownCloud-Client und private Setup-Datei vorbereitet.")
 
     @app.cli.command("disable-client")
     @click.argument("slug")

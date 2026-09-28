@@ -36,6 +36,7 @@
               <a href="{{ url_for(endpoint) }}"
                  {% if request.endpoint == endpoint %}aria-current="page"{% endif %}><span aria-hidden="true">{{ icon }}</span>{{ label }}</a>
             {% endfor %}
+            {% if current_user.is_admin %}<a href="{{ url_for('admin.index') }}" {% if request.blueprint == 'admin' %}aria-current="page"{% endif %}><span aria-hidden="true">⚙</span>Verwaltung</a>{% endif %}
           </nav>
           <div class="sidebar-bottom">
             <span class="avatar">{{ current_user.display_name[:1]|upper }}</span>

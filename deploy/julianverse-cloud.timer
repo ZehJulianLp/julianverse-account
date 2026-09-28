@@ -1,0 +1,10 @@
+[Unit]
+Description=Retry Julianverse ownCloud account provisioning
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

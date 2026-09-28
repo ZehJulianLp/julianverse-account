@@ -216,12 +216,15 @@ def totp_disable():
 @bp.get("/connections")
 @login_required
 def connections():
+    from .provisioning import ERRORS
+
     return render_template(
         "connections.html",
         discord=db.session.scalar(
             db.select(DiscordIdentity).where(DiscordIdentity.user_id == g.user.id)
         ),
         cloud=db.session.get(CloudConnection, g.user.id),
+        cloud_errors=ERRORS,
     )
 
 
@@ -330,11 +333,57 @@ def export_account():
 def delete_account():
     if request.form.get("confirmation") != g.user.username:
         abort(400, "Gib deinen Benutzernamen zur Bestätigung ein.")
+    # Serialize the last-admin check against role changes.
+    db.session.execute(db.update(User).where(User.id == g.user.id).values(enabled=User.enabled))
+    db.session.refresh(g.user)
+    if g.user.is_admin and not db.session.scalar(
+        db.select(User.id).where(
+            User.is_admin.is_(True),
+            User.enabled.is_(True),
+            User.id != g.user.id,
+        )
+    ):
+        abort(409, "Ernenne zuerst ein anderes aktives Konto zum Admin.")
+    connection = db.session.get(CloudConnection, g.user.id)
+    if connection and connection.managed:
+        from urllib.parse import quote
+
+        from .provisioning import ProvisionError, ocs
+
+        if connection.lease_until >= now():
+            abort(409, "Die Cloud-Einrichtung läuft gerade. Bitte versuche es gleich erneut.")
+        connection.lease_until = now() + 300
+        db.session.commit()
+        try:
+            if connection.remote_enabled is not None:
+                ocs("PUT", "users/" + quote(connection.username, safe="") + "/disable")
+        except ProvisionError:
+            connection.lease_until = 0
+            db.session.commit()
+            abort(
+                503,
+                "Der Cloud-Zugang konnte noch nicht gesperrt werden. Dein Konto wurde nicht gelöscht; bitte versuche es später erneut.",
+            )
+    # The network call releases the transaction; repeat the invariant check.
+    db.session.execute(db.update(User).where(User.id == g.user.id).values(enabled=User.enabled))
+    db.session.refresh(g.user)
+    if g.user.is_admin and not db.session.scalar(
+        db.select(User.id).where(
+            User.is_admin.is_(True),
+            User.enabled.is_(True),
+            User.id != g.user.id,
+        )
+    ):
+        if connection:
+            connection.lease_until = 0
+            connection.next_attempt = 0
+            db.session.commit()
+        abort(409, "Ernenne zuerst ein anderes aktives Konto zum Admin.")
     db.session.delete(g.user)
     db.session.commit()
     session.clear()
     flash(
-        "Dein Julianverse-Konto wurde gelöscht. Deine Dateien in ownCloud und lokale App-Daten bleiben erhalten.",
+        "Dein Julianverse-Konto wurde gelöscht. Ein automatisch erstellter Cloud-Zugang wurde gesperrt. Cloud-Dateien und lokale App-Daten bleiben erhalten.",
         "success",
     )
     return redirect(url_for("auth.login"))

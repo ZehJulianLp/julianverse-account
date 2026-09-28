@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from 'macros.html' import csrf, heading %}
+{% block title %}Verwaltung{% endblock %}
+{% block content %}
+{{ heading('JULIANVERSE VERWALTEN', 'Benutzer & Dienste', 'Verwalte Konten, Adminrechte und die Einrichtung des Cloud-Speichers.') }}
+{% if not provision_configured %}<div class="notice info">Die automatische ownCloud-Einrichtung wartet noch auf die Serverkonfiguration. Neue Cloud-Aufträge bleiben gespeichert.</div>{% endif %}
+<form method="get" class="form-actions"><label>Benutzer suchen<input name="q" value="{{ search }}" placeholder="Benutzername oder E-Mail"></label><button class="secondary">Suchen</button></form>
+{% for user, cloud in users %}
+<section class="card spaced">
+  <div class="section-head"><h2>{{ user.display_name }} <small>@{{ user.username }}</small></h2><span class="badge {{ 'good' if user.enabled else '' }}">{{ 'Admin' if user.is_admin else 'Benutzer' }} · {{ 'Aktiv' if user.enabled else 'Gesperrt' }}</span></div>
+  <p>{{ user.email }} · {{ 'Bestätigt' if user.email_verified else 'E-Mail unbestätigt' }}</p>
+  {% if cloud %}
+  <p>ownCloud: <strong>{{ cloud.username }}</strong> · {{ 'Neues Konto · 1 GB' if cloud.managed else 'Bestehendes Konto · bisheriges Speicherlimit' }}<br>
+  {% if cloud.state == 'ready' %}{{ 'Bereit' if not cloud.managed or cloud.remote_enabled else 'Cloud-Zugang gesperrt' }}{% else %}{{ 'Wartet auf E-Mail-Bestätigung' if not user.email_verified else 'Einrichtung ausstehend' }}{% endif %}
+  {% if cloud.managed and cloud.remote_enabled != user.enabled %} · Änderung ausstehend{% endif %}</p>
+  {% if cloud.last_error %}<div class="notice">{{ errors.get(cloud.last_error, 'Bitte Einrichtung prüfen.') }}</div>{% endif %}
+  {% else %}<p>ownCloud: Bestehendes Konto kann unter Verbindungen verknüpft werden.</p>{% endif %}
+  <form method="post" action="{{ url_for('admin.update_user', user_id=user.id) }}" class="form-actions">
+    {{ csrf() }}
+    {% if user.id != current_user.id %}<button class="secondary" name="action" value="{{ 'disable' if user.enabled else 'enable' }}">{{ 'Konto sperren' if user.enabled else 'Konto entsperren' }}</button>
+    <button class="secondary" name="action" value="{{ 'remove-admin' if user.is_admin else 'make-admin' }}">{{ 'Adminrechte entfernen' if user.is_admin else 'Zum Admin machen' }}</button>{% endif %}
+    <button class="secondary" name="action" value="revoke-sessions">Sitzungen beenden</button>
+    {% if user.enabled and user.email_verified %}<button class="secondary" name="action" value="reset-password">Passwort-Link senden</button>{% endif %}
+    {% if cloud and cloud.managed %}<button class="secondary" name="action" value="retry-cloud">Cloud erneut prüfen</button>{% endif %}
+  </form>
+  {% if cloud and not cloud.managed %}<p class="help">Eine Kontosperre beendet den Julianverse-Zugriff. Den bisherigen ownCloud-Login verwaltest du weiterhin in ownCloud.</p>{% endif %}
+</section>
+{% else %}<p>Keine Benutzer gefunden.</p>{% endfor %}
+<div class="form-actions">{% if page > 1 %}<a href="{{ url_for('admin.index', page=page-1, q=search) }}">← Zurück</a>{% endif %}{% if more %}<a href="{{ url_for('admin.index', page=page+1, q=search) }}">Weiter →</a>{% endif %}</div>
+<section class="card spaced"><h2>App-Anbindungen</h2><p>ownCloud ist die erste Anbindung. Weitere Apps folgen separat.</p>{% for client in clients %}<p><strong>{{ client.client_name }}</strong> · {{ 'Aktiv' if client.enabled else 'Gesperrt' }}</p>{% else %}<p>Noch keine App registriert.</p>{% endfor %}</section>
+<details class="card spaced"><summary>Letzte Verwaltungsaktionen</summary>{% for event, actor in events %}<p>{{ event.created_at|date }} · {{ actor or 'Gelöschtes Konto / CLI' }} · {{ event.action }}{% if event.target_id %}<br><small>Konto-ID: {{ event.target_id }}</small>{% endif %}</p>{% else %}<p>Noch keine Aktionen.</p>{% endfor %}</details>
+{% endblock %}

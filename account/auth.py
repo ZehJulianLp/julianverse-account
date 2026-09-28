@@ -91,6 +91,10 @@ def register():
         user.set_password(password)
         db.session.add(user)
         try:
+            if request.form.get("existing_cloud") != "yes":
+                from .provisioning import queue_new_cloud
+
+                queue_new_cloud(user)
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
@@ -417,6 +421,9 @@ def discord_callback():
     )
     db.session.add(user)
     db.session.flush()
+    from .provisioning import queue_new_cloud
+
+    queue_new_cloud(user)
     db.session.add(
         DiscordIdentity(
             id=discord_id, user_id=user.id, username=profile.get("username", username)[:100]

@@ -1,6 +1,7 @@
 import json
 import re
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlsplit
+from xml.etree import ElementTree
 
 import httpx
 from flask import (
@@ -18,7 +19,15 @@ from flask import (
 from sqlalchemy.exc import IntegrityError
 
 from .extensions import csrf, db
-from .models import AuthorizationCode, CloudConnection, OAuthToken, SyncPreference, now
+from .models import (
+    AuthorizationCode,
+    Client,
+    CloudConnection,
+    OAuthToken,
+    SyncPreference,
+    User,
+    now,
+)
 from .security import decrypt, encrypt, fresh_required, login_required, rate_limit
 
 bp = Blueprint("cloud", __name__)
@@ -102,9 +111,66 @@ def dav(connection, method, url, **kwargs):
             502,
             "ownCloud hat den Zugriff abgelehnt. Bitte prüfe die Verbindung und das App-Passwort.",
         )
+    if result.status_code == 507:
+        abort(507, "Dein ownCloud-Speicher ist voll. Deine lokale Änderung bleibt erhalten.")
     if result.status_code >= 500 or 300 <= result.status_code < 400:
         abort(502, "ownCloud konnte die Anfrage nicht ausführen.")
     return result
+
+
+def revoke_cloud_login(user_id):
+    client_id = db.session.scalar(db.select(Client.client_id).where(Client.slug == "owncloud"))
+    if client_id:
+        db.session.execute(
+            db.update(OAuthToken)
+            .where(OAuthToken.user_id == user_id, OAuthToken.client_id == client_id)
+            .values(revoked=True)
+        )
+        db.session.execute(
+            db.update(AuthorizationCode)
+            .where(
+                AuthorizationCode.user_id == user_id,
+                AuthorizationCode.client_id == client_id,
+                AuthorizationCode.used_at.is_(None),
+            )
+            .values(used_at=now())
+        )
+
+
+def proven_username(username, password):
+    connection = CloudConnection(username=username, secret=encrypt(password))
+    result = dav(
+        connection,
+        "PROPFIND",
+        current_app.config["OWNCLOUD_BASE_URL"] + "/remote.php/dav/",
+        headers={"Depth": "0", "Content-Type": "application/xml"},
+        content=b'<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>',
+    )
+    if result.status_code != 207:
+        abort(502, "Der ownCloud-Zugang konnte nicht geprüft werden.")
+    try:
+        tree = ElementTree.fromstring(result.content)
+        hrefs = [
+            p.findtext("{DAV:}prop/{DAV:}current-user-principal/{DAV:}href")
+            for p in tree.findall("{DAV:}response/{DAV:}propstat")
+            if " 200 " in (p.findtext("{DAV:}status") or "")
+        ]
+        hrefs = {h for h in hrefs if h}
+        if len(hrefs) != 1:
+            raise ValueError
+        path = urlsplit(hrefs.pop()).path
+        prefix = (
+            urlsplit(current_app.config["OWNCLOUD_BASE_URL"]).path
+            + "/remote.php/dav/principals/users/"
+        )
+        if not path.startswith(prefix) or not path.endswith("/"):
+            raise ValueError
+        canonical = unquote(path[len(prefix) : -1])
+        if not canonical or len(canonical) > 254 or any(c in canonical for c in "/\\\x00\r\n"):
+            raise ValueError
+        return canonical
+    except (ElementTree.ParseError, ValueError):
+        abort(502, "ownCloud hat die Identität des angemeldeten Benutzers nicht bestätigt.")
 
 
 @bp.post("/connections/owncloud")
@@ -121,21 +187,51 @@ def connect():
         or not 1 <= len(password) <= 1024
     ):
         abort(400, "Bitte gib deinen ownCloud-Benutzernamen und ein App-Passwort ein.")
-    old = db.session.get(CloudConnection, g.user.id)
+    if not g.user.email_verified:
+        abort(403, "Bitte bestätige zuerst deine E-Mail-Adresse.")
+    username = proven_username(username, password)
+    # Serialize the final binding change against the provisioning worker.
+    checked = db.session.execute(
+        db.update(User).where(User.id == g.user.id, User.enabled.is_(True)).values(enabled=True)
+    )
+    if checked.rowcount != 1:
+        abort(403)
+    old = db.session.get(CloudConnection, g.user.id, populate_existing=True)
+    if old and old.lease_until >= now():
+        abort(409, "Die Cloud-Einrichtung läuft gerade. Bitte versuche es gleich erneut.")
+    if old and old.managed and old.remote_enabled is not None and old.state != "ready":
+        abort(409, "Die Cloud-Einrichtung muss zuerst abgeschlossen werden.")
+    if (
+        old
+        and old.managed
+        and old.remote_enabled is not None
+        and old.username_key != username.casefold()
+    ):
+        abort(
+            409,
+            "Für dich wurde bereits ein Cloud-Konto angelegt. Bitte wende dich für einen Kontowechsel an den Betreiber, damit keine Dateien zurückbleiben.",
+        )
     connection = CloudConnection(user_id=g.user.id, username=username, secret=encrypt(password))
-    result = dav(connection, "PROPFIND", dav_url(connection), headers={"Depth": "0"}, content=b"")
-    if result.status_code != 207:
-        abort(502, "Der ownCloud-Dateibereich konnte nicht geprüft werden.")
     # Every reconnect disables sync, including when changing the ownCloud account.
     revoke_sync_access(g.user.id)
+    revoke_cloud_login(g.user.id)
     db.session.execute(
         db.update(SyncPreference).where(SyncPreference.user_id == g.user.id).values(enabled=False)
     )
     if old:
         old.username, old.secret, old.connected_at = username, connection.secret, now()
+        old.username_key = username.casefold()
+        if old.remote_enabled is None:
+            old.managed = False
+        old.state = "ready"
+        old.last_error = None
     else:
         db.session.add(connection)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        abort(409, "Dieses ownCloud-Konto ist bereits mit einem Julianverse-Konto verknüpft.")
     flash(
         "ownCloud verbunden. Wähle unter Cloud-Sync, welche Daten synchronisiert werden dürfen.",
         "success",
@@ -148,13 +244,19 @@ def connect():
 def disconnect():
     revoke_sync_access(g.user.id)
     connection = db.session.get(CloudConnection, g.user.id)
-    if connection:
+    if connection and not connection.managed:
+        revoke_cloud_login(g.user.id)
         db.session.delete(connection)
     db.session.execute(
         db.update(SyncPreference).where(SyncPreference.user_id == g.user.id).values(enabled=False)
     )
     db.session.commit()
-    flash("ownCloud getrennt. Vorhandene Dateien und lokale Daten bleiben erhalten.", "success")
+    flash(
+        "Sync ausgeschaltet. Dein Cloud-Konto und vorhandene Dateien bleiben erhalten."
+        if connection and connection.managed
+        else "ownCloud getrennt. Vorhandene Dateien und lokale Daten bleiben erhalten.",
+        "success",
+    )
     return redirect(url_for("pages.connections"))
 
 
@@ -178,7 +280,8 @@ def settings():
 @bp.post("/sync/preferences")
 @login_required
 def preferences():
-    if not db.session.get(CloudConnection, g.user.id):
+    connection = db.session.get(CloudConnection, g.user.id)
+    if not connection or connection.state != "ready":
         abort(409, "Bitte verbinde zuerst ownCloud.")
     selected = set(request.form.getlist("resources"))
     allowed = {f"{app}/{res}" for app, entry in CATALOG.items() for res in entry["resources"]}
@@ -218,9 +321,28 @@ def authorize_sync(app_slug, resource=None):
     if token.client.slug != app_slug:
         abort(403, "Dieses App-Token darf nur auf den eigenen App-Ordner zugreifen.")
     connection = db.session.get(CloudConnection, user.id)
-    if not connection:
+    if not connection or connection.state != "ready":
         abort(409, "ownCloud ist nicht verbunden.")
     return user, connection
+
+
+@bp.post("/connections/owncloud/create")
+@fresh_required
+def create_cloud():
+    from .provisioning import queue_new_cloud
+
+    if not g.user.email_verified:
+        abort(403, "Bitte bestätige zuerst deine E-Mail-Adresse.")
+    if db.session.get(CloudConnection, g.user.id):
+        abort(409, "Es besteht bereits eine Cloud-Verknüpfung oder ein Auftrag.")
+    try:
+        queue_new_cloud(g.user)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        abort(409, "Der Auftrag wurde bereits angelegt.")
+    flash("Dein Cloud-Konto mit 1 GB wird eingerichtet. Sync bleibt ausgeschaltet.", "success")
+    return redirect(url_for("pages.connections"))
 
 
 @bp.route("/api/sync/<app_slug>", methods=["GET", "OPTIONS"])

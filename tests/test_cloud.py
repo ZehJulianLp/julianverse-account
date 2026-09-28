@@ -29,9 +29,11 @@ def auth_headers(client):
 
 @respx.mock
 def test_connect_validates_credentials_but_does_not_upload(app, logged_in):
-    root = respx.request("PROPFIND", "https://cloud.test/remote.php/dav/files/cloud-user/").respond(
-        207
-    )
+    root = respx.request("PROPFIND", "https://cloud.test/remote.php/dav/").respond(
+        207, text='<d:multistatus xmlns:d="DAV:"><d:response><d:propstat><d:prop>'
+        '<d:current-user-principal><d:href>/remote.php/dav/principals/users/cloud-user/</d:href>'
+        '</d:current-user-principal></d:prop><d:status>HTTP/1.1 200 OK</d:status>'
+        '</d:propstat></d:response></d:multistatus>')
     response = logged_in.post(
         "/connections/owncloud",
         data={

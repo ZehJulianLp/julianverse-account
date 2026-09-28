@@ -30,6 +30,7 @@ class User(db.Model):
     password_hash = db.Column(db.Text, nullable=True)
     email_verified = db.Column(db.Boolean, nullable=False, default=False)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
+    is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     locale = db.Column(db.String(5), nullable=False, default="de")
     theme = db.Column(db.String(10), nullable=False, default="system")
     created_at = db.Column(db.Integer, nullable=False, default=now)
@@ -114,6 +115,30 @@ class CloudConnection(db.Model):
     username = db.Column(db.String(254), nullable=False)
     secret = db.Column(db.Text, nullable=False)
     connected_at = db.Column(db.Integer, nullable=False, default=now)
+    # The persistent SSO binding survives disabling sync. Existing cloud accounts
+    # are only linked after proof of ownership, never by matching email addresses.
+    username_key = db.Column(db.String(254), unique=True, nullable=False)
+    managed = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    state = db.Column(db.String(16), nullable=False, default="ready", server_default="ready")
+    remote_enabled = db.Column(db.Boolean, nullable=True)
+    last_error = db.Column(db.String(32), nullable=True)
+    attempts = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    next_attempt = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    lease_until = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    lease_token = db.Column(db.String(64), nullable=True)
+
+    def __init__(self, **kwargs):
+        if "username" in kwargs:
+            kwargs.setdefault("username_key", kwargs["username"].casefold())
+        super().__init__(**kwargs)
+
+
+class AdminEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    actor_id = db.Column(db.ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    target_id = db.Column(db.ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    action = db.Column(db.String(40), nullable=False)
+    created_at = db.Column(db.Integer, nullable=False, default=now)
 
 
 class SyncPreference(db.Model):
@@ -131,6 +156,12 @@ class Client(db.Model, OAuth2ClientMixin):
     slug = db.Column(db.String(40), unique=True, nullable=False)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     client_id = db.Column(db.String(48), unique=True, nullable=False)
+
+    def get_allowed_scope(self, scope):
+        allowed = super().get_allowed_scope(scope)
+        if self.slug != "owncloud":
+            allowed = " ".join(s for s in allowed.split() if s != "owncloud")
+        return allowed
 
     def check_client_secret(self, client_secret):
         return bool(
@@ -190,6 +221,11 @@ class OAuthToken(db.Model):
         return self.issued_at + self.expires_in <= now()
 
     def is_revoked(self):
+        if self.client and self.client.slug == "owncloud":
+            from .provisioning import sso_username
+
+            if not self.user or not sso_username(self.user):
+                return True
         s = self.browser_session
         return (
             self.revoked

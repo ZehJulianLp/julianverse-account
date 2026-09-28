@@ -18,6 +18,10 @@ ohne Anmeldung lokal nutzbar; eine Anmeldung aktiviert keinen Sync.
 - OIDC Authorization Code mit S256-PKCE, Zustimmung, Discovery, JWKS, signierten
   ID-Tokens, Userinfo, rotierenden Refresh-Tokens und Token-Widerruf.
 - ownCloud-Verbindung über ein persönliches App-Passwort, verschlüsselt gespeichert.
+- Automatische ownCloud-Konten mit 1 GB nach bestätigter E-Mail, mit Wiederholungen
+  bei Ausfällen und OIDC-Anmeldung. Sync bleibt zunächst ausgeschaltet.
+- Adminbereich für Kontosperren, Adminrechte, Sitzungswiderruf, Passwort-Links
+  und den Status der Cloud-Einrichtung.
 - Sync-Freigaben je App und Datenart, WebDAV-Dateizugriffe mit ETag-Konfliktschutz.
 - Browser-SDK mit lokaler IndexedDB-Arbeitskopie, Offline-Warteschlange,
   ausdrücklicher Konfliktlösung und Trennung verschiedener Konten.
@@ -27,9 +31,10 @@ ohne Anmeldung lokal nutzbar; eine Anmeldung aktiviert keinen Sync.
 
 ### Noch separat einzurichten
 
-Discord benötigt eine eigene OAuth-Anwendung. SMTP braucht einen funktionierenden
-Mailzugang. Ein eigenes ownCloud-Konto muss bereits vorhanden sein. Das bestehende
-ownCloud-Weblogin wird durch dieses Projekt noch nicht auf SSO umgestellt.
+Discord benötigt eine OAuth-Anwendung. SMTP braucht einen funktionierenden
+Mailzugang. Die eigene ownCloud-Installation wird mit `scripts/setup-owncloud.sh`
+angebunden; das Skript ist für den vorhandenen Docker-Compose-Dienst unter
+`/opt/owncloud` vorbereitet.
 BrickHoard, Unternehmensregister, Startpage und Wetter müssen jeweils an OIDC bzw.
 das Sync-SDK angeschlossen werden. Ihre öffentlichen Installationen bleiben bei
 der Installation dieser Anwendung unverändert. Ein geprüfter Startpage-Datenadapter
@@ -60,6 +65,107 @@ Das Passwort wird verdeckt abgefragt. `--verified` nur verwenden, wenn die Adres
 tatsächlich geprüft wurde. Es gibt kein Standardpasswort und kein verstecktes
 Administratorkonto. OIDC und die produktive Passkey-Anmeldung über HTTPS testen;
 die OIDC-Transportprüfung wird auch lokal nicht abgeschaltet.
+
+Das erste Adminrecht wird ausdrücklich vergeben:
+
+```bash
+.venv/bin/flask --app wsgi make-admin julian
+```
+
+Danach erscheint **Verwaltung** im Menü. Weitere aktive, bestätigte Konten können
+dort Adminrechte erhalten. Niemand kann sich dort selbst sperren oder die eigenen
+Adminrechte entfernen. Das letzte aktive Adminkonto kann nicht gelöscht werden.
+
+## ownCloud als Grundlage
+
+Nach einer Datenbanksicherung die Account-Version aktualisieren und starten:
+
+```bash
+.venv/bin/flask --app wsgi backup-db instance/vor-owncloud.sqlite3
+bash scripts/install-service.sh
+sudo bash scripts/setup-owncloud.sh
+```
+
+Das Skript installiert ownClouds OIDC-App **2.3.5** für ownCloud Server 10.12–10.x
+mit fest geprüfter SHA-256-Summe. Es richtet einen zusätzlichen Login-Button und
+einen Dienstbenutzer als Gruppenadministrator der Gruppe `julianverse-account`
+ein. Er hat keine globalen ownCloud-Adminrechte. Bestehende Konten werden weder
+dieser Gruppe hinzugefügt noch verändert. Eine fremde OIDC-Konfiguration wird
+nicht überschrieben. Vorherige Login-Konfiguration und Account-Umgebung werden
+geschützt unter `/var/backups/julianverse-account-owncloud.*` gesichert.
+
+Die Einrichtung prüft über echtes HTTPS den SSO-Redirect mit PKCE und Nonce sowie
+Anlage, 1-GB-Quota, WebDAV-Identität und Sperren/Entsperren mit einem eigens erstellten
+leeren Prüfkonto. Nur dieses bestätigte Prüfkonto wird danach entfernt. Bei einem
+Fehler im SSO-Schritt wird die vorherige Login-Konfiguration wiederhergestellt.
+Ein vollständiger Browser-Login mit einem echten Konto folgt nach der Einrichtung.
+
+### Neue Benutzer
+
+- Passwortregistrierungen erhalten sofort einen gespeicherten Cloud-Auftrag;
+  die Anlage beginnt erst nach bestätigter E-Mail. Dasselbe gilt für per CLI
+  erstellte Konten. Neue Discord-Konten besitzen bereits eine bestätigte E-Mail.
+- `julianverse-cloud.timer` bearbeitet Aufträge etwa jede Minute. Fehler sind im
+  Adminbereich sichtbar und werden automatisch erneut versucht.
+- Neue Cloud-Namen sind aus der unveränderlichen Account-ID abgeleitet. Das
+  vermeidet Kollisionen mit bestehenden Benutzernamen. Im Web wird der Anzeigename
+  verwendet. Das zufällige Cloud-Passwort liegt ausschließlich verschlüsselt vor.
+- Die Quota wird in ownCloud auf **1 GB (1.073.741.824 Bytes)** gesetzt und geprüft,
+  bevor SSO oder die Sync-API Zugriff erhalten. Größere Dateien und Bilder lädt
+  der Nutzer direkt in ownCloud hoch. Diese Quota umfasst die eigenen Dateien;
+  Vorschaubilder, Versionen und Papierkorb können zusätzlich Serverplatz belegen.
+- Die automatische Einrichtung aktiviert keine Sync-Freigabe und lädt keine
+  lokalen App-Daten hoch. Unter Verbindungen führt **Mit Julianverse anmelden**
+  zum eigenen Cloud-Konto. In ownCloud lassen sich App-Passwörter für Clients anlegen.
+
+### Bestehende Benutzer migrieren
+
+1. Bei der Passwortregistrierung **Ich habe bereits ein ownCloud-Konto** wählen.
+   Dadurch wird kein zweites Cloud-Konto erzeugt. Bei der CLI lautet die Option
+   `--existing-cloud`. Bereits vorhandene Julianverse-Konten erhalten ebenfalls
+   keinen automatischen zusätzlichen Cloud-Auftrag.
+2. Zunächst mit dem bisherigen Login in ownCloud anmelden und ein persönliches
+   App-Passwort erstellen.
+3. In Julianverse Account unter **Verbindungen → ownCloud** Benutzername und
+   App-Passwort bestätigen. Die App liest den authentifizierten WebDAV-Principal
+   und ordnet dieses Cloud-Konto genau einem Julianverse-Konto zu. Gleiche E-Mails
+   oder ähnliche Benutzernamen reichen ausdrücklich nicht aus.
+4. Danach SSO ausprobieren. Dateien, Freigaben, Kontoname und bisherige Quota
+   bleiben bestehen. Anschließend kann Discord zusätzlich verknüpft werden.
+
+Für bestehende Cloud-Nutzer ist dieser Weg vor einer neuen Discord-Registrierung
+vorgesehen, da diese sonst automatisch ein neues Cloud-Konto anlegt. Ein bereits
+angelegtes verwaltetes Konto lässt sich nicht stillschweigend gegen ein anderes
+tauschen; vorhandene Dateien müssen bei einem späteren Wechsel separat berücksichtigt
+werden. Eine Übertragung von Dateien ist nicht Teil der Kontoverknüpfung.
+
+### Sperren, Sitzungen und Wiederherstellung
+
+Kontosperren widerrufen Julianverse-Sitzungen und App-Zugriffe sofort. Bei neu
+angelegten, verwalteten Cloud-Konten sperrt der Hintergrunddienst zusätzlich den
+ownCloud-Benutzer. Bis zur erfolgreichen Ausführung zeigt die Verwaltung die
+Änderung als ausstehend an. Selbst verknüpfte Bestandskonten behalten ihren bisherigen
+Cloud-Login; dessen Sperre bleibt eine Aufgabe der ownCloud-Verwaltung.
+ownCloud prüft SSO-Tokens über Introspection und bei der Erneuerung. Bereits dort
+zwischengespeicherte SSO-Sitzungen können bis zur nächsten Prüfung weiterbestehen
+(bei den aktuellen Tokens bis zu zehn Minuten). Das Beenden einer einzelnen
+Julianverse-Sitzung sperrt keine separaten ownCloud-App-Passwörter.
+
+Bei einer Kontolöschung wird ein verwalteter Cloud-Zugang zuerst gesperrt. Seine
+Dateien werden nicht entfernt. Vorher herunterladen; spätere Wiederherstellung
+erfordert den Betreiber. Verknüpfte Bestandskonten bleiben eigenständig nutzbar.
+
+```bash
+systemctl --user status julianverse-cloud.timer
+.venv/bin/flask --app wsgi reconcile-cloud
+```
+
+`instance/owncloud-setup.json` enthält verschlüsselte Einrichtungsschlüssel und
+gehört zusammen mit `.env` und der Datenbank in die private Sicherung. Für einen
+Rückbau zuerst den Cloud-Timer stoppen, dann die gesicherte `openid-connect`-
+Konfiguration mit ownClouds Konfigurationswerkzeugen wiederherstellen und die
+passende Account-Umgebung zurückspielen. Angelegte Benutzer und deren Dateien
+werden durch einen Rückbau nicht automatisch gelöscht.
 
 ## Betrieb auf diesem Server
 
@@ -245,4 +351,6 @@ dann `flask db upgrade`. Keine Laufzeit-Aufrufe von `db.create_all()`.
 Referenzen: [Authlib OIDC](https://docs.authlib.org/en/latest/oauth2/authorization-server/flask/openid-connect.html),
 [Discord OAuth2](https://docs.discord.com/developers/topics/oauth2),
 [ownCloud WebDAV](https://doc.owncloud.com/server/10.15/developer_manual/webdav_api/index.html),
+[ownCloud Provisioning API](https://doc.owncloud.com/server/10.15/developer_manual/core/apis/provisioning-api.html),
+[ownCloud OIDC-App](https://github.com/owncloud/openidconnect/releases/tag/v2.3.5),
 [Certbot Standalone & Hooks](https://eff-certbot.readthedocs.io/en/stable/using.html).
