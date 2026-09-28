@@ -39,3 +39,24 @@ test("Startpage preserves a local backup and rejects writes outside the category
     notes: "old notes",
   });
 });
+
+test("Startpage default bookmark keys survive sync; executable links remain blocked", () => {
+  const storage = new Storage();
+  const tiles = [{ title: "GitHub", url: "https://github.com", key: "gh" }];
+  storage.setItem("tiles", JSON.stringify(tiles));
+  const data = snapshot("bookmarks", storage);
+  apply("bookmarks", { schemaVersion: 1, data }, storage);
+  assert.deepEqual(JSON.parse(storage.getItem("tiles")), tiles);
+  for (const url of [
+    "javascript:alert(1)",
+    "https://user:secret@example.org",
+  ]) {
+    assert.throws(() =>
+      apply(
+        "bookmarks",
+        { schemaVersion: 1, data: { tiles: [{ ...tiles[0], url }] } },
+        storage,
+      ),
+    );
+  }
+});

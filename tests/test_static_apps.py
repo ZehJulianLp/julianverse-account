@@ -111,7 +111,7 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
                 token_endpoint_auth_method="none",
             )
         )
-        resources = ["notes"] if slug == "startpage" else ["settings", "locations"]
+        resources = ["notes", "bookmarks"] if slug == "startpage" else ["settings", "locations"]
         for resource in resources:
             db.session.add(
                 SyncPreference(user_id=user.id, app_slug=slug, resource=resource, enabled=True)
@@ -153,8 +153,8 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
                 "request",
                 lambda request: (
                     refreshes.append(True)
-                    if request.url == issuer + "/oauth/token"
-                    and "grant_type=refresh_token" in (request.post_data or "")
+                    if request.url == issuer + f"/oauth/browser/{slug}"
+                    and '"token"' in (request.post_data or "")
                     else None
                 ),
             )
@@ -191,6 +191,19 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
                 timeout=15000
             )
             assert not writes
+            cookie = next(
+                cookie
+                for cookie in context.cookies()
+                if cookie["name"] == f"__Secure-jv-app-{slug}"
+            )
+            assert (
+                cookie["httpOnly"] and cookie["secure"] and cookie["expires"] > time.time() + 86400
+            )
+            assert cookie["name"] not in page.evaluate("document.cookie")
+            assert not any(
+                "access_token" in value or "refresh_token" in value
+                for value in page.evaluate("Object.values(localStorage)")
+            )
             # A forged callback message cannot replace the session.
             page.evaluate(
                 "window.postMessage({type:'julianverse:callback',url:location.href}, location.origin)"
@@ -210,13 +223,26 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
                 assert len(writes) == 1
             name = f"{resource}.json"
             assert name in remote
-            # Expired browser access tokens are refreshed with rotation, without losing local work.
+            # Short access tokens are renewed through the persistent cookie.
             page.evaluate(
                 "Date.now = (() => { const now = Date.now; return () => now() + 590000; })()"
             )
             row.get_by_role("button", name="Jetzt abgleichen").click()
             playwright.expect(row.locator(".jv-status")).to_contain_text("Abgeglichen")
             assert len(refreshes) == 1
+            # Reload keeps both login and the explicit category choice without new writes.
+            page.reload()
+            open_account()
+            playwright.expect(page.get_by_text("Angemeldet als julian", exact=True)).to_be_visible()
+            playwright.expect(row.locator(".jv-status")).to_contain_text("Abgeglichen")
+            assert len(writes) == 1
+            # A second app tab uses the same cookie without revoking this tab's token.
+            another = context.new_page()
+            another.goto(f"{origin}/{slug}/")
+            playwright.expect(another.locator("#julianverse-account")).to_contain_text(
+                "Angemeldet als julian"
+            )
+            another.close()
             context.set_offline(True)
             if slug == "startpage":
                 edit_note("Offline geändert")
@@ -238,6 +264,22 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
                     assert remote[name][0]["data"][key]["theme"] == "dark"
                 else:
                     assert remote[name][0]["data"][key] == value
+            if slug == "weather":
+                # The installed PWA resumes after a cold offline reload, preserving local edits.
+                page.wait_for_function("navigator.serviceWorker.controller !== null", timeout=10000)
+                context.set_offline(True)
+                page.reload()
+                open_account()
+                playwright.expect(
+                    page.get_by_text("Angemeldet als julian", exact=True)
+                ).to_be_visible()
+                page.locator("#theme-select").select_option("light")
+                page.wait_for_timeout(300)
+                context.set_offline(False)
+                playwright.expect(row.locator(".jv-status")).to_contain_text(
+                    "Abgeglichen", timeout=15000
+                )
+                assert remote[name][0]["data"]["julianverse-weather:settings"]["theme"] == "light"
             # A concurrent change must become a visible conflict; neither version is lost.
             cloud = json.loads(json.dumps(remote[name][0]))
             if slug == "startpage":
@@ -258,8 +300,27 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
             else:
                 assert page.locator("#theme-select").input_value() == "light"
                 assert page.locator("#units-select").input_value() == "metric"
+            # Edits made just before reload retain the old ETag and cannot overwrite a newer cloud copy.
+            before_reload = json.loads(json.dumps(remote[name][0]))
+            if slug == "startpage":
+                before_reload["data"]["notes"] = "Cloud vor Reload"
+                page.evaluate("localStorage.setItem('notes', JSON.stringify('Lokal vor Reload'))")
+            else:
+                before_reload["data"]["julianverse-weather:settings"]["theme"] = "dark"
+                page.locator("#units-select").select_option("imperial")
+            remote[name] = (before_reload, '"before-reload"')
+            page.reload()
+            open_account()
+            playwright.expect(row.locator(".jv-conflict")).to_be_visible(timeout=15000)
+            row.get_by_role("button", name="Cloud-Version verwenden", exact=True).click()
+            playwright.expect(row.locator(".jv-status")).to_contain_text("Abgeglichen")
             # Explicit download from an existing file is also available after stopping sync.
             row.get_by_role("button", name="Sync ausschalten").click()
+            page.reload()
+            open_account()
+            playwright.expect(
+                row.get_by_role("button", name="Cloud-Daten übernehmen", exact=True)
+            ).to_be_visible()
             row.get_by_role("button", name="Cloud-Daten übernehmen", exact=True).click()
             playwright.expect(row.locator(".jv-status")).to_contain_text("Abgeglichen")
             if slug == "weather":
@@ -302,6 +363,26 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
                 row.get_by_role("button", name="Lokale Version verwenden", exact=True).click()
                 playwright.expect(row.locator(".jv-status")).to_contain_text("Abgeglichen")
                 assert remote[name][0]["data"]["notes"] == "Während Download bearbeitet"
+            if slug == "startpage":
+                bookmarks = page.locator('.jv-resource[data-resource="bookmarks"]')
+                bookmarks.get_by_role("button", name="Lokale Daten hochladen", exact=True).click()
+                playwright.expect(bookmarks.locator(".jv-status")).to_contain_text("Abgeglichen")
+                assert remote["bookmarks.json"][0]["data"]["tiles"][0]["key"] == "gh"
+            # Explicit logout persists across reload and stops the remembered categories.
+            page.get_by_role("button", name="App abmelden", exact=True).click()
+            page.reload()
+            open_account()
+            playwright.expect(
+                page.get_by_role("button", name="Mit Julianverse anmelden")
+            ).to_be_visible()
+            with page.expect_popup() as popup_info:
+                page.get_by_role("button", name="Mit Julianverse anmelden").click()
+            # Central Account session still exists; no password or repeat consent needed.
+            playwright.expect(
+                row.get_by_role("button", name="Cloud-Daten übernehmen", exact=True)
+            ).to_be_visible(timeout=15000)
+            row.get_by_role("button", name="Cloud-Daten übernehmen", exact=True).click()
+            playwright.expect(row.locator(".jv-status")).to_contain_text("Abgeglichen")
             captures = Path("test-results")
             captures.mkdir(exist_ok=True)
             page.screenshot(path=str(captures / f"{slug}-sync-desktop.png"), full_page=True)

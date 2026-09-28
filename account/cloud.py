@@ -84,28 +84,36 @@ def dav_url(connection, app_slug=None, resource=None):
 
 
 def dav(connection, method, url, **kwargs):
-    try:
-        with httpx.Client(
-            auth=(connection.username, decrypt(connection.secret)),
-            timeout=12,
-            follow_redirects=False,
-            trust_env=False,
-        ) as client:
-            with client.stream(method, url, **kwargs) as response:
-                chunks, length = [], 0
-                for chunk in response.iter_bytes():
-                    length += len(chunk)
-                    if length > MAX_BYTES:
-                        abort(
-                            502,
-                            "Die ownCloud-Datei überschreitet die unterstützte Größe von 512 KiB.",
-                        )
-                    chunks.append(chunk)
-                result = httpx.Response(
-                    response.status_code, headers=response.headers, content=b"".join(chunks)
+    attempts = 2 if method.upper() in ("GET", "HEAD", "PROPFIND") else 1
+    for attempt in range(attempts):
+        try:
+            with httpx.Client(
+                auth=(connection.username, decrypt(connection.secret)),
+                timeout=httpx.Timeout(6, connect=3),
+                follow_redirects=False,
+                trust_env=False,
+            ) as client:
+                with client.stream(method, url, **kwargs) as response:
+                    chunks, length = [], 0
+                    for chunk in response.iter_bytes():
+                        length += len(chunk)
+                        if length > MAX_BYTES:
+                            abort(
+                                502,
+                                "Die ownCloud-Datei überschreitet die unterstützte Größe von 512 KiB.",
+                            )
+                        chunks.append(chunk)
+                    result = httpx.Response(
+                        response.status_code, headers=response.headers, content=b"".join(chunks)
+                    )
+            if result.status_code in (502, 503, 504) and attempt + 1 < attempts:
+                continue
+            break
+        except httpx.HTTPError:
+            if attempt + 1 == attempts:
+                abort(
+                    502, "ownCloud ist gerade nicht erreichbar. Deine lokale Kopie bleibt erhalten."
                 )
-    except httpx.HTTPError:
-        abort(502, "ownCloud ist gerade nicht erreichbar. Deine lokale Kopie bleibt erhalten.")
     if result.status_code in (401, 403):
         abort(
             502,

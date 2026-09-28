@@ -1,11 +1,32 @@
 import httpx
+import pytest
 import respx
 from conftest import csrf
 from test_oidc import issue
+from werkzeug.exceptions import BadGateway
 
 from account.extensions import db
 from account.models import CloudConnection, SyncPreference, User
 from account.security import encrypt
+
+
+@respx.mock
+def test_dav_retries_reads_but_never_uncertain_writes(app):
+    from account.cloud import dav
+
+    with app.app_context():
+        connection = CloudConnection(username="test", secret=encrypt("test"))
+        read = respx.get("https://cloud.test/file").mock(
+            side_effect=[httpx.ReadTimeout("temporary"), httpx.Response(200, text="saved")]
+        )
+        assert dav(connection, "GET", "https://cloud.test/file").text == "saved"
+        assert read.call_count == 2
+        write = respx.put("https://cloud.test/file").mock(
+            side_effect=httpx.ReadTimeout("uncertain")
+        )
+        with pytest.raises(BadGateway):
+            dav(connection, "PUT", "https://cloud.test/file", content=b"change")
+        assert write.call_count == 1
 
 
 def setup_cloud(app, enabled=False):
@@ -30,10 +51,12 @@ def auth_headers(client):
 @respx.mock
 def test_connect_validates_credentials_but_does_not_upload(app, logged_in):
     root = respx.request("PROPFIND", "https://cloud.test/remote.php/dav/").respond(
-        207, text='<d:multistatus xmlns:d="DAV:"><d:response><d:propstat><d:prop>'
-        '<d:current-user-principal><d:href>/remote.php/dav/principals/users/cloud-user/</d:href>'
-        '</d:current-user-principal></d:prop><d:status>HTTP/1.1 200 OK</d:status>'
-        '</d:propstat></d:response></d:multistatus>')
+        207,
+        text='<d:multistatus xmlns:d="DAV:"><d:response><d:propstat><d:prop>'
+        "<d:current-user-principal><d:href>/remote.php/dav/principals/users/cloud-user/</d:href>"
+        "</d:current-user-principal></d:prop><d:status>HTTP/1.1 200 OK</d:status>"
+        "</d:propstat></d:response></d:multistatus>",
+    )
     response = logged_in.post(
         "/connections/owncloud",
         data={

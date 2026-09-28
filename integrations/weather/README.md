@@ -14,8 +14,9 @@ seine Koordinaten. Benachrichtigungen werden auf einem anderen Gerät nicht akti
 Dateien liegen unter `Julianverse/weather/` in ownCloud. Cloud-Importe aktualisieren
 localStorage, die zusätzliche IndexedDB-Kopie und die sichtbaren Einstellungen.
 Die PWA hält die Account-Module lokal im Cache; Auth-Callbacks mit Anmeldecodes
-werden nicht gecacht. Nach einem Neuladen bleiben lokale Daten erhalten, während
-Anmeldung und Sync-Auswahl erneut nötig sind.
+werden nicht gecacht. Anmeldung und ausdrücklich aktivierte Datenarten bleiben
+nach Neuladen und Browser-Neustart erhalten. Offline-Änderungen werden nach dem
+Wiederverbinden abgeglichen. Abmelden und ausgeschalteter Sync bleiben gespeichert.
 
 ```bash
 .venv/bin/python scripts/copy-browser-integration.py weather /PFAD/ZUM/WETTER-CHECKOUT \
@@ -36,5 +37,5 @@ node --test tests/*.test.mjs
 ```
 
 Der Browser-Test verwendet zwei lokale HTTPS-Server mit echter Account-Anmeldung,
-PKCE, CORS, Token-Rotation und Sync-API. ownCloud-Dateien werden im Test nur im
+PKCE, CORS, Cookie-Erneuerung und Sync-API. ownCloud-Dateien werden im Test nur im
 Arbeitsspeicher gehalten. Bestehende Nutzerkonten und Cloud-Dateien bleiben unberührt.

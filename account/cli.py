@@ -11,7 +11,16 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from .extensions import db
-from .models import Challenge, Client, MailAction, RateBucket, digest, now
+from .models import (
+    AppBrowserSession,
+    Challenge,
+    Client,
+    MailAction,
+    OAuthToken,
+    RateBucket,
+    digest,
+    now,
+)
 
 
 def init_app(app):
@@ -254,6 +263,8 @@ def init_app(app):
     @app.cli.command("cleanup")
     def cleanup():
         for model, condition in (
+            (AppBrowserSession, AppBrowserSession.expires_at < now()),
+            (OAuthToken, OAuthToken.refresh_expires_at < now()),
             (Challenge, Challenge.expires_at < now()),
             (MailAction, MailAction.expires_at < now()),
             (RateBucket, RateBucket.starts_at < now() - 86400),

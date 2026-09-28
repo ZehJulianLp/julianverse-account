@@ -325,6 +325,24 @@ Auswahl der Datenquelle. `attach()` meldet nur an. `save()` speichert zuerst lok
 `sync()` gleicht ab. Konflikte bleiben bis `resolve()` erhalten. Der Host muss diese
 Zustände anzeigen und darf lokale Fehler nicht durch eine leere Datei ersetzen.
 
+Die statischen Apps merken Anmeldung und aktivierte Datenarten pro Konto auf dem
+Gerät. `POST /oauth/browser/APP` tauscht nach PKCE ein Zugriffstoken gegen eine
+App-Sitzung mit Secure/HttpOnly-Cookie und erneuert kurzlebige Zugriffstokens.
+Nur exakt registrierte Origins mit eigenem CSRF-Header dürfen diesen Endpunkt
+mit Cookies aufrufen. Die App-Sitzung bleibt an die ursprüngliche Kontositzung
+und Token-Familie gebunden, höchstens 30 Tage. Widerruf und Kontosperre wirken sofort.
+Tokens werden nicht in localStorage oder IndexedDB abgelegt. Dort bleiben nur
+Kontoinformationen, Sync-Auswahl, Prüfsummen und lokale Arbeitskopien.
+Anmeldung allein aktiviert keine neue Datenart. Bereits ausdrücklich aktivierte
+Datenarten werden wieder aufgenommen; alte ETags schützen auch vor Konflikten
+nach Offline-Änderungen oder einem Neuladen. „Sync ausschalten“ und Abmelden bleiben
+gespeichert. Ein offline ausgelöstes Abmelden stoppt sofort lokal und widerruft
+die App-Sitzung beim nächsten Kontakt. Andere Tabs derselben App werden gestoppt.
+App und Account müssen für diese Cookies auf derselben Site liegen.
+
+Lesende ownCloud-Anfragen werden bei einem Transportfehler oder HTTP 502/503/504
+einmal wiederholt. Unsichere Schreibwiederholungen bleiben ausgeschlossen.
+
 ## Sicherung und Wartung
 
 ```bash

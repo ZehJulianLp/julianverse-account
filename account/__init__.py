@@ -100,11 +100,19 @@ def create_app(config=None):
     migrate.init_app(app, db, render_as_batch=True)
     csrf.init_app(app)
 
-    from . import admin, auth, cli, cloud, oidc, pages, passkeys
+    from . import admin, auth, browser_sessions, cli, cloud, oidc, pages, passkeys
     from .security import load_user
 
     app.before_request(load_user)
-    for blueprint in (auth.bp, pages.bp, cloud.bp, oidc.bp, passkeys.bp, admin.bp):
+    for blueprint in (
+        auth.bp,
+        pages.bp,
+        cloud.bp,
+        oidc.bp,
+        passkeys.bp,
+        admin.bp,
+        browser_sessions.bp,
+    ):
         app.register_blueprint(blueprint)
     auth.init_discord(app)
     oidc.init_server(app)

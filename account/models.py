@@ -237,3 +237,11 @@ class OAuthToken(db.Model):
             or s.revoked
             or s.expires_at <= now()
         )
+
+
+class AppBrowserSession(db.Model):
+    id = db.Column(db.String(64), primary_key=True)
+    token_id = db.Column(db.ForeignKey("o_auth_token.id", ondelete="CASCADE"), nullable=False)
+    token = db.relationship(OAuthToken)
+    origin = db.Column(db.String(255), nullable=False)
+    expires_at = db.Column(db.Integer, nullable=False, index=True)

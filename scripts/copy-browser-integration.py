@@ -14,7 +14,7 @@ parser.add_argument("--client-id", required=True)
 args = parser.parse_args()
 target = args.checkout.resolve() / "account"
 target.mkdir(exist_ok=True)
-for name in ("panel.mjs", "panel.css", "callback.mjs", "app.mjs", "data.mjs"):
+for name in ("panel.mjs", "panel.css", "callback.mjs", "app.mjs", "data.mjs", "session.mjs"):
     shutil.copyfile(root / "integrations/browser" / name, target / name)
 for name in ("sync.mjs", "oidc-client.mjs"):
     shutil.copyfile(root / "account/static/js" / name, target / name)

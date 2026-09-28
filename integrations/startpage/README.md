@@ -20,9 +20,12 @@ ihre Module lokal und kann ohne Account-Server weiter benutzt werden.
 6. „Sync ausschalten“ beendet weitere Abgleiche. „App abmelden“ widerruft die
    App-Tokens; lokale Daten und die Anmeldung auf der Account-Seite bleiben erhalten.
 
-Tokens bleiben im Arbeitsspeicher und werden während der geöffneten Sitzung
-rotiert. **Nach einem Neuladen sind Anmeldung und Auswahl der Datenarten erneut
-nötig.** Der Account-Login kann dabei seine bestehende SSO-Sitzung verwenden.
+Anmeldung und aktivierte Datenarten bleiben nach Neuladen und Browser-Neustart
+auf diesem Gerät erhalten. Ein Secure/HttpOnly-Cookie beim Account-Server erneuert
+kurzlebige Zugriffstokens, die nur im Arbeitsspeicher liegen. Die Sitzung endet
+spätestens nach 30 Tagen oder beim Widerruf der Account-Sitzung. Abmelden und
+„Sync ausschalten“ bleiben ebenfalls gespeichert. Offline-Änderungen werden beim
+Wiederverbinden mit der bisherigen Dateiversion abgeglichen, damit Konflikte sichtbar bleiben.
 Bei einem anderen Account in einem zweiten Tab wird der bisherige Sync gestoppt.
 
 ## Datenzuordnung
@@ -31,7 +34,7 @@ Bei einem anderen Account in einem zweiten Tab wird der bisherige Sync gestoppt.
 | --- | --- |
 | `notes` | Notizen |
 | `tasks` | Aufgaben, Erledigt-Status, Reihenfolge |
-| `bookmarks` | Kacheltitel und HTTP(S)-Links |
+| `bookmarks` | Kacheltitel, HTTP(S)-Links und optionale Kachel-IDs (`key`) |
 | `settings` | Design, Sprache, sichtbare Widgets, Farben, aktivierte Suchmaschinen |
 
 API-Schlüssel, Agent-Einstellungen, Suchverlauf, Cache, Bilder, Hintergründe und
@@ -62,3 +65,7 @@ Der öffentliche Client benötigt die exakte Callback-URL
 `https://julianverse.de/startpage/account-callback.html` und die Scopes
 `openid profile email sync`. Für andere Installationen müssen Client und
 `account/config.mjs` angepasst werden. Anmeldung benötigt HTTPS.
+
+Dauerhafte Anmeldung benötigt Cookies zwischen App und Account auf derselben Site
+(wie `julianverse.de` und `account.julianverse.de`). Fremde Sites brauchen eine eigene
+Cookie-/Deployment-Lösung; Drittanbieter-Cookies werden nicht vorausgesetzt.
