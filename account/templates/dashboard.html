@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% from 'macros.html' import heading %}{% block title %}Übersicht{% endblock %}
+{% block content %}{{ heading('DEIN ACCOUNT', 'Hallo, ' ~ current_user.display_name ~ '.', 'Hier laufen deine Zugänge zusammen. Du bestimmst, was verbunden ist.') }}
+  <section class="welcome-banner">
+    <div>
+      <span class="pill">ALLES AN EINEM ORT</span>
+      <h2>Dein Zugang zum Julianverse.</h2>
+      <p>Ein Profil, sichere Anmeldungen und deine Daten in ownCloud.</p>
+      <a class="button light" href="{{ url_for('pages.connections') }}">Verbindungen verwalten ↗</a>
+    </div>
+    <div class="banner-monogram" aria-hidden="true">jv<span>ACCOUNT</span></div>
+  </section>
+  <div class="stats"><a class="card stat" href="{{ url_for('pages.security') }}"><span>Aktive Sitzungen</span><strong>{{ session_count }}</strong><small>Geräte & Zugänge →</small></a><a class="card stat" href="{{ url_for('cloud.settings') }}"><span>Sync-Freigaben</span><strong>{{ sync_count }}</strong><small>Du entscheidest pro Datenart →</small></a><a class="card stat" href="{{ url_for('pages.connections') }}"><span>ownCloud</span><strong class="status-word">{{ 'Verbunden' if cloud else 'Noch offen' }}</strong><small>{{ cloud.username if cloud else 'Verbinde deinen Dateibereich' }} →</small></a></div>
+  <div class="grid two">
+    <section class="card">
+      <div class="section-head">
+        <h2>Dein Konto absichern</h2>
+        <span class="badge {{ 'good' if passkey_count or current_user.totp_secret else '' }}">{{ 'Zusätzlich geschützt' if passkey_count or current_user.totp_secret else 'Empfohlen' }}</span>
+      </div>
+      <p>Passkeys machen die Anmeldung einfacher. Ein Authenticator schützt den Zugang mit Passwort oder Discord zusätzlich.</p>
+      <a class="text-link" href="{{ url_for('pages.security') }}">Sicherheit verwalten →</a>
+    </section>
+    <section class="card">
+      <div class="section-head">
+        <h2>Lokal bleibt lokal</h2>
+        <span class="badge">LOCAL FIRST</span>
+      </div>
+      <p>Deine Apps funktionieren weiterhin ohne Konto. Erst wenn du Sync einschaltest und in der App startest, werden ausgewählte Daten abgeglichen.</p>
+      <a class="text-link" href="{{ url_for('cloud.settings') }}">Cloud-Sync ansehen →</a>
+    </section>
+  </div>
+{% endblock %}

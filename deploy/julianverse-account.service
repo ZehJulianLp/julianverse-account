@@ -1,0 +1,18 @@
+[Unit]
+Description=Julianverse Account (Flask / Gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+EnvironmentFile=@ROOT@/.env
+ExecStart=@ROOT@/.venv/bin/gunicorn --config @ROOT@/deploy/gunicorn.conf.py wsgi:app
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=40
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

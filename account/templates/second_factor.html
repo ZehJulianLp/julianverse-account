@@ -1,0 +1,2 @@
+{% extends "base.html" %}{% from 'macros.html' import csrf, field %}{% block title %}Anmeldung bestätigen{% endblock %}
+{% block content %}<section class="card narrow"><h1>Ein Schritt noch.</h1><p>Gib einen Code aus deiner Authenticator-App oder einen Wiederherstellungscode ein.</p><form method="post" class="stack">{{ csrf() }}{{ field('code','Sicherheitscode',autocomplete='one-time-code') }}<button class="primary">Anmeldung bestätigen</button></form></section>{% endblock %}

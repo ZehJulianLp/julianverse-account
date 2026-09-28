@@ -1,0 +1,2 @@
+{% extends "base.html" %}{% block title %}Anfrage fehlgeschlagen{% endblock %}
+{% block content %}<section class="card narrow"><p class="eyebrow">HTTP {{ error.code }}</p><h1>Das hat nicht geklappt.</h1><p>{{ error.description }}</p><a class="button secondary" href="{{ url_for('pages.index') }}">Zurück zum Konto</a></section>{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% from 'macros.html' import csrf, field %}
+{% block title %}Anmelden{% endblock %}
+{% block content %}
+  <div class="login-layout">
+    <section class="intro">
+      <span class="pill">DEIN JULIANVERSE</span>
+      <h1>
+        Ein Zuhause
+        <br>
+        für dein Konto.
+      </h1>
+      <p>Melde dich einmal an. Verwalte deine Apps, sichere deinen Zugang und entscheide selbst, was synchronisiert wird.</p>
+      <div class="orbit" aria-hidden="true">
+        <div class="orbit-ring"></div>
+        <span class="orbit-node node-top">Apps</span><span class="orbit-node node-left">ownCloud</span><span class="orbit-core">jv</span><span class="orbit-node node-right">Discord</span><span class="orbit-node node-bottom">Du entscheidest</span>
+      </div>
+      <p class="intro-note"><span class="dot"></span> Lokal nutzbar. Sync nur, wenn du ihn möchtest.</p>
+    </section>
+    <section class="card login-card">
+      <p class="eyebrow">WILLKOMMEN ZURÜCK</p>
+      <h2>Bei Julianverse anmelden</h2>
+      <p class="muted">Alles Wichtige an einem Ort.</p>
+      <form method="post" class="stack">
+        {{ csrf() }}<input type="hidden" name="next" value="{{ next }}">{{ field('identifier','E-Mail oder Benutzername',autocomplete='username') }}{{ field('password','Passwort','password',autocomplete='current-password') }}<a class="form-link" href="{{ url_for('auth.recover') }}">Passwort vergessen?</a><button class="primary">Anmelden <span aria-hidden="true">→</span></button>
+      </form>
+      <div class="divider">oder</div>
+      <button class="secondary full"
+              type="button"
+              data-passkey="login"
+              data-next="{{ next }}">Mit Passkey anmelden</button>
+      {% if discord_enabled %}<a class="button discord full"
+   href="{{ url_for('auth.discord_login', next=next) }}">Mit Discord anmelden</a>{% endif %}<p class="client-message" aria-live="polite"></p>
+      <p class="card-foot">Neu im Julianverse? <a href="{{ url_for('auth.register') }}">Konto erstellen</a></p>
+      <a class="muted small" href="{{ url_for('auth.resend') }}">Bestätigungs-E-Mail erneut anfordern</a>
+    </section>
+  </div>
+{% endblock %}

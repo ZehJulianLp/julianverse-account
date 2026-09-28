@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% block title %}Wiederherstellungscodes{% endblock %}
+{% block content %}<section class="card narrow"><span class="badge good">Authenticator aktiv</span><h1>Sichere deine Ersatzcodes.</h1><p>Jeder Code funktioniert einmal. Speichere sie an einem sicheren Ort. Sie werden nur jetzt angezeigt.</p><pre class="recovery-codes">{% for code in codes %}{{ code }}
+{% endfor %}</pre><button class="secondary" type="button" data-print>Codes drucken</button><a class="button primary" href="{{ url_for('pages.security') }}">Zur Sicherheit</a></section>{% endblock %}

@@ -1,0 +1,12 @@
+bind = "127.0.0.1:8096"
+workers = 2
+worker_class = "gthread"
+threads = 2
+timeout = 45
+graceful_timeout = 30
+keepalive = 5
+accesslog = None  # Do not record OAuth codes or email action tokens in request URLs.
+errorlog = "-"
+loglevel = "warning"
+capture_output = True
+umask = 0o077

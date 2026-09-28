@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% from 'macros.html' import csrf, field, heading %}{% block title %}Sicherheit{% endblock %}
+{% block content %}{{ heading('DEIN ZUGANG', 'Sicherheit', 'Verwalte deine Anmeldemethoden und behalte aktive Sitzungen im Blick.') }}
+  <div class="grid two"><section class="card"><div class="section-head"><h2>Passkeys</h2><span class="badge">EMPFOHLEN</span></div><p>Melde dich mit Fingerabdruck, Gesichtserkennung oder dem Gerätecode an.</p>{% for key in passkeys %}<div class="list-row"><div><strong>{{ key.name }}</strong><small>Zuletzt: {{ key.last_used|date }}</small></div><form method="post"
+      action="{{ url_for('passkeys.remove',identifier=key.id) }}">{{ csrf() }}<button class="subtle">Entfernen</button></form></div>{% else %}<p class="empty-inline">Noch kein Passkey eingerichtet.</p>{% endfor %}<label>Name des neuen Passkeys<input id="passkey-name" value="Mein Gerät" maxlength="80"></label><button class="secondary full" data-passkey="register" type="button">Passkey hinzufügen</button><p class="client-message" aria-live="polite"></p></section>
+    <section class="card"><h2>Authenticator</h2>{% if current_user.totp_secret %}<span class="badge good">Aktiv</span><p>Passwort- und Discord-Anmeldungen benötigen einen zusätzlichen Code. Passkeys bestätigen dich bereits über dein Gerät.</p><form method="post"
+      action="{{ url_for('pages.totp_disable') }}"
+      class="stack">{{ csrf() }}{{ field('code','Aktueller Authenticator- oder Wiederherstellungscode',autocomplete='one-time-code') }}<button class="danger-outline">Authenticator entfernen</button></form>{% else %}<p>Sichere Passwort- und Discord-Anmeldungen mit einem zusätzlichen Code aus einer Authenticator-App ab.</p><form method="post" action="{{ url_for('pages.totp_start') }}">{{ csrf() }}<button class="secondary">Authenticator einrichten</button></form>{% endif %}</section></div>
+  <section class="card">
+    <h2>{{ 'Passwort ändern' if current_user.password_hash else 'Passwort hinzufügen' }}</h2>
+    <form method="post"
+          action="{{ url_for('pages.password') }}"
+          class="grid password-form">
+      {{ csrf() }}{{ field('password','Neues Passwort · mindestens 12 Zeichen','password',autocomplete='new-password') }}{{ field('password_confirm','Passwort wiederholen','password',autocomplete='new-password') }}<button class="primary">Speichern</button>
+    </form>
+    <p class="help">Andere Sitzungen und ihre App-Tokens werden dabei widerrufen.</p>
+  </section>
+  <section class="card"><h2>Aktive Sitzungen</h2><p>Das Widerrufen meldet auch Apps ab, deren Zugang über diese Sitzung erteilt wurde.</p>{% for item in sessions %}<div class="list-row"><div><strong>{{ 'Diese Sitzung' if item.id == current_session else 'Weitere Sitzung' }}</strong><small class="break">{{ item.user_agent or 'Unbekanntes Gerät' }}</small><small>{{ item.last_seen|date }} · {{ item.method }}</small></div><form method="post"
+      action="{{ url_for('pages.revoke_session',identifier=item.id) }}">{{ csrf() }}<button class="subtle">{{ 'Abmelden' if item.id == current_session else 'Widerrufen' }}</button></form></div>{% endfor %}</section>{% endblock %}

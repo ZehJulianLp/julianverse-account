@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% from 'macros.html' import csrf, field %}{% block title %}Zugang bestätigen{% endblock %}
+{% block content %}<section class="card narrow"><p class="eyebrow">SICHERHEITSPRÜFUNG</p><h1>Bestätige deinen Zugang</h1><p>Für diese Änderung brauchen wir eine aktuelle Bestätigung. Führe die gewünschte Aktion danach erneut aus.</p>{% if current_user.password_hash %}<form method="post" class="stack">{{ csrf() }}<input type="hidden" name="next" value="{{ next }}">{{ field('password','Aktuelles Passwort','password',autocomplete='current-password') }}{% if current_user.totp_secret %}{{ field('code','Authenticator- oder Wiederherstellungscode',autocomplete='one-time-code') }}{% endif %}<button class="primary">Bestätigen</button></form>{% endif %}<button class="secondary full"
+        data-passkey="login"
+        data-next="{{ next }}"
+        type="button">Mit Passkey bestätigen</button>{% if discord_enabled %}<a class="button discord full"
+   href="{{ url_for('auth.discord_reauthenticate', next=next) }}">Mit Discord bestätigen</a>{% endif %}<p class="client-message" aria-live="polite"></p></section>{% endblock %}

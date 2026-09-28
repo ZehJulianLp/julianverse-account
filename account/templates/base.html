@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="de"
+      data-theme="{{ current_user.theme if current_user else 'system' }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="color-scheme" content="light dark">
+    <title>{% block title %}Dein Konto{% endblock %} · Julianverse Account</title>
+    <link rel="icon"
+          href="{{ url_for('static', filename='favicon.svg') }}"
+          type="image/svg+xml">
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='account.css') }}">
+    <script type="module" src="{{ url_for('static', filename='js/account.js') }}"></script>
+  </head>
+  <body>
+    <a class="skip" href="#content">Zum Inhalt</a>
+    {% if current_user %}
+      <div class="shell">
+        <aside class="sidebar">
+          <a class="brand"
+             href="{{ url_for('pages.dashboard') }}"><span class="brand-mark">j<span>v</span></span><span>Julianverse<small>ACCOUNT</small></span></a>
+          <form class="mobile-logout"
+                method="post"
+                action="{{ url_for('auth.logout') }}">
+            <input type="hidden"
+                   name="csrf_token"
+                   value="{{ csrf_token() }}"><button class="icon-button"
+        aria-label="Abmelden"
+        title="Abmelden">↪</button>
+          </form>
+          <p class="nav-label">DEIN BEREICH</p>
+          <nav aria-label="Kontoverwaltung">
+            {% for endpoint,label,icon in [('pages.dashboard','Übersicht','◈'),('pages.profile','Profil','○'),('pages.security','Sicherheit','◇'),('pages.connections','Verbindungen','⇄'),('pages.applications','Apps & Zugriff','▦'),('cloud.settings','Cloud-Sync','☁'),('pages.privacy','Daten & Datenschutz','▤')] %}
+              <a href="{{ url_for(endpoint) }}"
+                 {% if request.endpoint == endpoint %}aria-current="page"{% endif %}><span aria-hidden="true">{{ icon }}</span>{{ label }}</a>
+            {% endfor %}
+          </nav>
+          <div class="sidebar-bottom">
+            <span class="avatar">{{ current_user.display_name[:1]|upper }}</span>
+            <div><strong>{{ current_user.display_name }}</strong><small>@{{ current_user.username }}</small></div>
+            <form method="post" action="{{ url_for('auth.logout') }}">
+              <input type="hidden"
+                     name="csrf_token"
+                     value="{{ csrf_token() }}"><button class="icon-button"
+        aria-label="Abmelden"
+        title="Abmelden">↪</button>
+            </form>
+          </div>
+        </aside>
+        <div class="workspace">
+          <header class="topbar">
+            <span>Ein Konto für dein Julianverse</span><a href="https://julianverse.de">Julianverse öffnen ↗</a>
+          </header>
+    {% else %}
+      <div class="public-shell">
+        <header class="public-header">
+          <a class="brand" href="{{ url_for('pages.index') }}"><span class="brand-mark">j<span>v</span></span><span>Julianverse<small>ACCOUNT</small></span></a><a href="https://julianverse.de">Zur Startseite ↗</a>
+        </header>
+    {% endif %}
+    <main id="content" class="{{ 'main' if current_user else 'public-main' }}">
+      {% with messages = get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="notice {{ category }}" role="status">{{ message }}</div>{% endfor %}{% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+    <footer>
+      Julianverse Account <span>Deine Apps. Deine Daten. Deine Entscheidung.</span>
+    </footer>
+    {% if current_user %}</div>{% endif %}
+  </div>
+</body>
+</html>

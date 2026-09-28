@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% from 'macros.html' import csrf, field %}{% block title %}Authenticator einrichten{% endblock %}
+{% block content %}<section class="card narrow"><h1>Authenticator verbinden</h1><p>Scanne den QR-Code in deiner Authenticator-App. Du kannst den Schlüssel auch von Hand eingeben.</p><div class="qr">{{ qr|safe }}</div><code class="secret">{{ secret }}</code><form method="post"
+      action="{{ url_for('pages.totp_confirm') }}"
+      class="stack">{{ csrf() }}<input type="hidden" name="challenge" value="{{ challenge }}">{{ field('code','Aktueller sechsstelliger Code',autocomplete='one-time-code') }}<button class="primary">Einrichtung abschließen</button></form></section>{% endblock %}

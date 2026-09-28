@@ -1,0 +1,13 @@
+{% macro csrf() %}
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% endmacro %}
+{% macro field(name, label, type='text', value='', autocomplete='', required=true, placeholder='') %}
+  <label>{{ label }}<input name="{{ name }}"
+       type="{{ type }}"
+       value="{{ value }}"
+       {% if autocomplete %}autocomplete="{{ autocomplete }}"{% endif %}
+       {% if required %} required{% endif %}
+       {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+       {% if type == 'password' and name != 'code' %} maxlength="128"{% endif %}></label>
+{% endmacro %}
+{% macro heading(eyebrow, title, description) %}<div class="page-heading"><p class="eyebrow">{{ eyebrow }}</p><h1>{{ title }}</h1><p>{{ description }}</p></div>{% endmacro %}

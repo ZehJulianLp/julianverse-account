@@ -1,0 +1,2 @@
+{% extends "base.html" %}{% block title %}Anmeldung abgebrochen{% endblock %}
+{% block content %}<section class="card narrow"><h1>Die App-Anfrage ist ungültig.</h1><p>{{ error.description }}</p><code>{{ error.error }}</code><p>Starte die Anmeldung erneut in der App. Bleibt der Fehler bestehen, muss der App-Betreiber die Verbindung prüfen.</p><a class="button secondary" href="{{ url_for('pages.index') }}">Zum Konto</a></section>{% endblock %}
