@@ -11,6 +11,8 @@ export async function beginLogin({
   clientId,
   redirectUri,
   scope = "openid profile email sync",
+  storageKey = "julianverse-pending-login",
+  navigate = (url) => location.assign(url),
 }) {
   const account = new URL(issuer);
   if (account.protocol !== "https:")
@@ -32,7 +34,7 @@ export async function beginLogin({
     nonce,
     created: Date.now(),
   };
-  sessionStorage.setItem("julianverse-pending-login", JSON.stringify(pending));
+  sessionStorage.setItem(storageKey, JSON.stringify(pending));
   const url = new URL("/oauth/authorize", account.origin);
   url.search = new URLSearchParams({
     client_id: clientId,
@@ -44,17 +46,20 @@ export async function beginLogin({
     code_challenge: challenge,
     code_challenge_method: "S256",
   });
-  location.assign(url);
+  navigate(url);
 }
 
-export async function finishLogin() {
-  const params = new URLSearchParams(location.search);
-  const pending = JSON.parse(
-    sessionStorage.getItem("julianverse-pending-login") || "null",
-  );
-  sessionStorage.removeItem("julianverse-pending-login");
+export async function finishLogin({
+  callbackUrl = location.href,
+  storageKey = "julianverse-pending-login",
+} = {}) {
+  const received = new URL(callbackUrl);
+  const params = received.searchParams;
+  const pending = JSON.parse(sessionStorage.getItem(storageKey) || "null");
+  sessionStorage.removeItem(storageKey);
   // Remove short-lived credentials from the address bar and browser history.
-  history.replaceState(null, "", location.pathname);
+  if (callbackUrl === location.href)
+    history.replaceState(null, "", location.pathname);
   if (
     !pending ||
     params.get("state") !== pending.state ||
@@ -65,8 +70,11 @@ export async function finishLogin() {
     );
   const callback = new URL(pending.redirectUri);
   if (
-    callback.origin !== location.origin ||
-    callback.pathname !== location.pathname
+    received.origin !== location.origin ||
+    callback.origin !== received.origin ||
+    callback.pathname !== received.pathname ||
+    callback.search ||
+    received.hash
   )
     throw new Error("Die Callback-Adresse stimmt nicht überein.");
   if (params.has("error") || !params.get("code"))
@@ -74,6 +82,7 @@ export async function finishLogin() {
   const response = await fetch(`${pending.issuer}/oauth/token`, {
     method: "POST",
     credentials: "omit",
+    signal: AbortSignal.timeout(20000),
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
@@ -89,6 +98,7 @@ export async function finishLogin() {
   // Identity is obtained through the authenticated userinfo endpoint; no unverified JWT decoding.
   const userResponse = await fetch(`${pending.issuer}/oauth/userinfo`, {
     credentials: "omit",
+    signal: AbortSignal.timeout(20000),
     headers: { Authorization: `Bearer ${tokens.access_token}` },
   });
   if (!userResponse.ok)
@@ -105,6 +115,7 @@ export async function refresh({ issuer, clientId, refreshToken }) {
   const response = await fetch(`${issuer}/oauth/token`, {
     method: "POST",
     credentials: "omit",
+    signal: AbortSignal.timeout(20000),
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "refresh_token",
@@ -120,6 +131,7 @@ export async function revoke({ issuer, clientId, token }) {
   const response = await fetch(`${issuer}/oauth/revoke`, {
     method: "POST",
     credentials: "omit",
+    signal: AbortSignal.timeout(20000),
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: clientId, token }),
   });

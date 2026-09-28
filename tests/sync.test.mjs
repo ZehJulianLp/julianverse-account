@@ -127,3 +127,21 @@ test("deletions persist as tombstones and disable stops network requests", async
   assert.equal(env.requests, before);
   assert.equal((await sdk.read("notes")).document.deleted, true);
 });
+
+test("local editing during a download keeps the original ETag and detects the cloud conflict", async () => {
+  const { sdk, env } = environment();
+  env.remote = { schemaVersion: 1, data: "original", deleted: false };
+  env.etag = '"original"';
+  await sdk.attach("token");
+  await sdk.enable("notes", { source: "cloud" });
+  env.remote = { schemaVersion: 1, data: "other device", deleted: false };
+  env.etag = '"other"';
+  const record = await sdk.sync("notes", {
+    localData: "original",
+    readLocal: () => "edited during GET",
+  });
+  assert.equal(record.document.data, "edited during GET");
+  assert.equal(record.etag, '"original"');
+  assert.equal(record.conflict.document.data, "other device");
+  assert.equal(env.puts, 0);
+});

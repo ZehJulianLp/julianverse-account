@@ -1,58 +1,64 @@
-# Startpage anbinden
+# Startpage mit Julianverse Account
 
-Der Adapter ist für die vorhandene Startpage unter `/srv/http/startpage` vorbereitet.
-Die öffentliche Startpage wird durch die Account-Installation **noch nicht verändert**.
-Die vorhandenen Apps brauchen zusätzlich ihre eigenen Sync-Bedienelemente und einen
-Anmelde-Callback. Der Account-Server und das Browser-SDK sind dafür implementiert.
+Die statische Startpage nutzt ein lokales JavaScript-Modul für OIDC mit PKCE und
+optionalen ownCloud-Sync. Der Account-Bereich sitzt unter der Uhr. Die App lädt
+ihre Module lokal und kann ohne Account-Server weiter benutzt werden.
+
+## Bedienung
+
+1. „Julianverse Account · Cloud-Sync“ öffnen und „Mit Julianverse anmelden“ wählen.
+   Die Anmeldung öffnet ein eigenes Fenster. Der statische Callback gibt den
+   einmaligen Code nur an das öffnende Fenster derselben Origin zurück.
+2. Unter „Freigaben im Account verwalten“ die gewünschten Datenarten freigeben.
+3. Pro Datenart ausdrücklich „Lokale Daten hochladen“ oder „Cloud-Daten übernehmen“
+   wählen. Anmeldung allein überträgt keine App-Inhalte.
+4. Danach gleicht die geöffnete App lokale Änderungen, bei Rückkehr zur App und
+   etwa alle 30 Sekunden ab. Offline-Änderungen bleiben lokal gespeichert.
+5. Bei Konflikten beide Versionen herunterladen und die gewünschte Version wählen.
+   Vor Cloud-Importen wird die lokale Version gesichert; sie ist im Bereich der
+   jeweiligen Datenart als JSON herunterladbar.
+6. „Sync ausschalten“ beendet weitere Abgleiche. „App abmelden“ widerruft die
+   App-Tokens; lokale Daten und die Anmeldung auf der Account-Seite bleiben erhalten.
+
+Tokens bleiben im Arbeitsspeicher und werden während der geöffneten Sitzung
+rotiert. **Nach einem Neuladen sind Anmeldung und Auswahl der Datenarten erneut
+nötig.** Der Account-Login kann dabei seine bestehende SSO-Sitzung verwenden.
+Bei einem anderen Account in einem zweiten Tab wird der bisherige Sync gestoppt.
 
 ## Datenzuordnung
 
-| Ressource | Vorhandene lokale Daten |
+| Ressource | Lokale Daten |
 | --- | --- |
-| `notes` | `notes` |
-| `tasks` | `todos` |
-| `bookmarks` | `tiles` |
-| `settings` | explizite Liste von Darstellung, Sprache, Widgets, Suchmaschinen |
+| `notes` | Notizen |
+| `tasks` | Aufgaben, Erledigt-Status, Reihenfolge |
+| `bookmarks` | Kacheltitel und HTTP(S)-Links |
+| `settings` | Design, Sprache, sichtbare Widgets, Farben, aktivierte Suchmaschinen |
 
-API-Schlüssel, Agent-Einstellungen, Suchverlauf, Cache und Bilder werden nicht erfasst.
-Profile enthalten in der bestehenden App verschachtelte Kopien vieler Datenarten;
-dafür braucht es vor der Integration eine eigene Zuordnung der Freigaben. Der erste
-Adapter synchronisiert deshalb keine Profile.
+API-Schlüssel, Agent-Einstellungen, Suchverlauf, Cache, Bilder, Hintergründe und
+Profile werden nicht übertragen. Profile enthalten verschachtelte Kopien mehrerer
+Datenarten und brauchen eine separate Freigabezuordnung.
 
-## Einbindung
+Die Dateien liegen in `Julianverse/startpage/` im ownCloud-Konto. Das JSON-Format
+muss bei direkter Bearbeitung erhalten bleiben. Die App prüft Struktur, Typen,
+Längen und Link-Protokolle vor einer Übernahme. Maximal 512 KiB pro Cloud-Datei.
 
-1. `adapter.mjs`, `account/static/js/sync.mjs` und `oidc-client.mjs` als lokale Dateien
-   in die Startpage übernehmen. Dadurch bleibt die lokale App auch bei einem Ausfall
-   des Account-Servers startbar.
-2. Einen öffentlichen OIDC-Client mit Slug `startpage`, exakter HTTPS-Callback-URL
-   und Scopes `openid profile email sync` anlegen (siehe Haupt-README).
-3. „Mit Julianverse anmelden“ löst `beginLogin()` aus. Der Callback verwendet
-   `finishLogin()`. Tokens bleiben im Arbeitsspeicher; bei einem Neuladen kann der
-   Nutzer erneut anmelden, ohne lokale Daten zu verlieren.
-4. Nach `sync.attach(tokens.access_token)` bleibt Sync aus. Pro Ressource ausdrücklich
-   Cloud-Daten übernehmen, lokale Daten hochladen oder einen gespeicherten
-   Arbeitsstand fortsetzen lassen. Vor dem ersten Abgleich die lokale Version sichern.
-5. Bei Änderungen zuerst die bestehende lokale Speicherung ausführen, dann
-   `sync.save(resource, snapshot(resource))`. Ein fehlgeschlagener Abgleich darf
-   die lokale Bearbeitung nicht blockieren.
-6. `sync.sync(resource)` nur für aktivierte Ressourcen aufrufen. Bei `record.conflict`
-   beide Versionen anzeigen und `resolve(resource, 'local' | 'cloud')` erst nach
-   einer Entscheidung ausführen. Änderungen aus der Cloud vor `apply()` in der App
-   validieren (Typen, Längen, Link-Protokolle); danach die betroffenen Widgets neu rendern.
-7. `stop(resource)` oder `disconnect()` stoppt den Abgleich. Lokale Arbeitskopien
-   bleiben erhalten. Der Account-Wechsel aktiviert keine der vorherigen Ressourcen.
+## Wartung
 
-```js
-import {JulianverseSync} from './sync.mjs';
-import {snapshot} from './adapter.mjs';
+Die gemeinsame Quelle liegt in `integrations/browser`, das SDK in
+`account/static/js`, der Datenadapter hier. Kopien werden bewusst mit der App
+ausgeliefert, damit ein Account-Ausfall das Starten der lokalen App nicht verhindert.
 
-const sync = new JulianverseSync({issuer: 'https://account.julianverse.de', app: 'startpage'});
-await sync.attach(tokens.access_token);
-// Erst nach ausdrücklicher Auswahl „Diese lokalen Notizen hochladen“:
-await sync.enable('notes', {source: 'local', localData: snapshot('notes')});
-const record = await sync.sync('notes');
-// record.conflict muss in der App behandelt werden.
+```bash
+.venv/bin/python scripts/copy-browser-integration.py startpage /PFAD/ZUM/STARTPAGE-CHECKOUT \
+  --client-id OEFFENTLICHE_CLIENT_ID
 ```
 
-`enable()` lädt selbst keine Inhalte hoch. Erst `sync()` führt einen bedingten
-Schreibzugriff aus. Offline geänderte Daten bleiben in IndexedDB erhalten.
+Dieser Befehl kopiert Module, öffentliche Konfiguration und Callback in den
+Checkout. Er verändert weder HTML-Einbindung noch öffentliche Installation.
+Die vorhandene Einbindung nutzt `julianverse:change` nach lokalen Schreibvorgängen
+und `julianverseApply` zum Aktualisieren der sichtbaren Widgets.
+
+Der öffentliche Client benötigt die exakte Callback-URL
+`https://julianverse.de/startpage/account-callback.html` und die Scopes
+`openid profile email sync`. Für andere Installationen müssen Client und
+`account/config.mjs` angepasst werden. Anmeldung benötigt HTTPS.

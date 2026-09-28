@@ -224,7 +224,7 @@ export class JulianverseSync {
       return record; // Offline queue is durable before any network operation.
     });
   }
-  async sync(resource) {
+  async sync(resource, { localData, readLocal } = {}) {
     const context = this.context(resource);
     if (!this.active.has(resource))
       throw new SyncError("Sync ist ausgeschaltet.");
@@ -233,6 +233,15 @@ export class JulianverseSync {
       const record = await this.store.get(context.key);
       const remote = await this.remote(context);
       if (record.conflict) return record;
+      // The host can still be edited while GET is in flight. Preserve the old
+      // ETag so an overlapping cloud edit becomes a conflict, not an overwrite.
+      if (readLocal) {
+        const latest = readLocal();
+        if (!same(latest, localData)) {
+          record.document = documentFor(latest);
+          record.dirty = true;
+        }
+      }
       if (record.dirty) {
         if (same(record.document, remote.document)) {
           record.dirty = false;

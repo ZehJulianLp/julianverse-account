@@ -35,10 +35,13 @@ Discord benötigt eine OAuth-Anwendung. SMTP braucht einen funktionierenden
 Mailzugang. Die eigene ownCloud-Installation wird mit `scripts/setup-owncloud.sh`
 angebunden; das Skript ist für den vorhandenen Docker-Compose-Dienst unter
 `/opt/owncloud` vorbereitet.
-BrickHoard, Unternehmensregister, Startpage und Wetter müssen jeweils an OIDC bzw.
-das Sync-SDK angeschlossen werden. Ihre öffentlichen Installationen bleiben bei
-der Installation dieser Anwendung unverändert. Ein geprüfter Startpage-Datenadapter
-und Einbauhinweise liegen in [integrations/startpage](integrations/startpage/README.md).
+Startpage und Wetter nutzen das gemeinsame Browser-Modul für optionale Anmeldung
+und ownCloud-Sync. Datenzuordnung, Bedienung und Einbauhinweise liegen unter
+[integrations/startpage](integrations/startpage/README.md) und
+[integrations/weather](integrations/weather/README.md). Die Account-Installation
+verändert diese statischen Apps nicht automatisch; die Module werden mit den
+jeweiligen App-Checkouts ausgeliefert.
+BrickHoard und Unternehmensregister benötigen noch ihre eigene OIDC-Anbindung.
 
 ## Lokal starten
 
