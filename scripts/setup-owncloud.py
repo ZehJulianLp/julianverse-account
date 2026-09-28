@@ -4,6 +4,7 @@ No credentials in argv or output. The original password login stays available.
 Only accounts created by Julianverse are managed by the provisioning service.
 """
 
+import argparse
 import hashlib
 import json
 import os
@@ -25,17 +26,94 @@ from dotenv import dotenv_values, set_key
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "2.3.5"  # Compatible with ownCloud 10.12–10.x, PHP >= 7.4.
 SHA256 = "4bc0e74cdd5a8266274dc4e77d24a651f9abc1622f1bd07a74b3652e5c16316a"
-BOOTSTRAP = "define('OC_CONSOLE', true); require '/var/www/owncloud/lib/base.php'; "
+BOOTSTRAP = (
+    "define('OC_CONSOLE', true); "
+    "$_SERVER['SCRIPT_FILENAME'] = '/var/www/owncloud/occ'; "
+    "$_SERVER['SCRIPT_NAME'] = '/var/www/owncloud/occ'; "
+    "require '/var/www/owncloud/lib/base.php'; "
+)
+# Match the official ownCloud image's /usr/bin/occ wrapper. docker exec does
+# not inherit variables computed by the container's running entrypoint. The
+# config depends on these defaults, including OWNCLOUD_VOLUME_APPS.
+PHP_RUNNER = r"""set -eo pipefail
+set +x
+if [[ -z "${OWNCLOUD_ENTRYPOINT_INITIALIZED:-}" ]]; then
+    [[ -d "$1" ]] || { echo 'OWNCLOUD_ENTRYPOINT_MISSING' >&2; exit 1; }
+    while IFS= read -r entrypoint_script; do
+        source "$entrypoint_script"
+    done < <(find "$1" -iname '*.sh' -type f | sort)
+fi
+exec php -d apc.enable_cli=1 -r "$2"
+"""
 
 
-def run(args, *, data=None):
-    result = subprocess.run(
-        args, input=data, text=True, capture_output=True, check=False, timeout=180
-    )
+def error_hint(output):
+    """Only fixed, non-secret descriptions ever reach the terminal."""
+    lowered = output.lower()
+    if "permission denied" in lowered and ("docker.sock" in lowered or "docker daemon" in lowered):
+        return "Zugriff auf den Docker-Dienst verweigert."
+    if "cannot connect to the docker daemon" in lowered:
+        return "Der Docker-Dienst ist nicht erreichbar."
+    if "is not a docker command" in lowered or "unknown shorthand flag" in lowered:
+        return "Docker Compose ist in dieser Umgebung nicht verfügbar."
+    if "owncloud_entrypoint_missing" in lowered:
+        return "Die Initialisierungsskripte des ownCloud-Images fehlen."
+    if "app directory" in lowered and "not found" in lowered:
+        return "Ein ownCloud-App-Verzeichnis fehlt in der Konsolenumgebung."
+    if "sqlstate[" in lowered or "failed to connect to the database" in lowered:
+        return "ownCloud kann in der Konsolenumgebung nicht auf die Datenbank zugreifen."
+    if "cannot write into" in lowered and "config" in lowered:
+        return "Die ownCloud-Konsole kann das Konfigurationsverzeichnis nicht schreiben."
+    if "not compatible with php" in lowered:
+        return "Die PHP-Version der Konsole passt nicht zu ownCloud."
+    if "no such container" in lowered or "is not running" in lowered:
+        return "Der ownCloud-Container läuft nicht oder wurde zwischenzeitlich ersetzt."
+    return "Details stehen ausschließlich in der privaten Fehlerdatei."
+
+
+def run(args, *, data=None, step=None):
+    step = step or ("ownCloud-Containerbefehl" if args[0] == "docker" else "Account-Dienstbefehl")
+    try:
+        result = subprocess.run(
+            args, input=data, text=True, capture_output=True, check=False, timeout=180
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(step + ": Zeitlimit von 180 Sekunden überschritten.") from None
+    except OSError:
+        raise RuntimeError(
+            step + ": Das benötigte Programm konnte nicht gestartet werden."
+        ) from None
     if result.returncode:
-        # PHP and HTTP error bodies may contain credentials. Keep them private.
-        raise RuntimeError("Ein Einrichtungsschritt ist fehlgeschlagen (" + args[0] + ").")
+        # Bootstrap/SQL diagnostics can contain secrets. Never print raw output
+        # or stdin; store diagnostics only in a new root-private 0600 file.
+        output = result.stdout + "\n" + result.stderr
+        hint = error_hint(output)
+        log_note = ""
+        if os.geteuid() == 0:
+            try:
+                fd, filename = tempfile.mkstemp(
+                    prefix="julianverse-owncloud-error-", suffix=".log", dir="/var/log"
+                )
+                with os.fdopen(fd, "w") as stream:
+                    stream.write(f"Schritt: {step}\nExit: {result.returncode}\n" + output)
+                log_note = " Private Fehlerdatei (nur root): " + filename
+            except OSError:
+                log_note = " Die private Fehlerdatei konnte nicht geschrieben werden."
+        raise RuntimeError(f"{step} fehlgeschlagen (Exit {result.returncode}). {hint}{log_note}")
     return result.stdout
+
+
+def run_php(docker, code, payload=None, *, step="ownCloud-Konfiguration ausführen"):
+    output = run(
+        docker
+        + ["bash", "-c", PHP_RUNNER, "julianverse-php", "/etc/entrypoint.d", BOOTSTRAP + code],
+        data=json.dumps(payload) if payload is not None else None,
+        step=step,
+    )
+    try:
+        return json.loads(output)
+    except ValueError:
+        raise RuntimeError(step + ": Die Konsole hat kein gültiges JSON geliefert.") from None
 
 
 def verify_provisioning(cloud, service_user, password, group):
@@ -101,7 +179,7 @@ def verify_provisioning(cloud, service_user, password, group):
                 ) from None
 
 
-def main():
+def main(check_only=False):
     if os.geteuid() != 0:
         raise RuntimeError("Bitte mit sudo ausführen.")
     os.umask(0o077)
@@ -117,8 +195,10 @@ def main():
         f"XDG_RUNTIME_DIR=/run/user/{account.pw_uid}",
         f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{account.pw_uid}/bus",
     ]
+    print("Suche den laufenden ownCloud-Container.", flush=True)
     container = run(
-        ["docker", "compose", "-f", "/opt/owncloud/docker-compose.yml", "ps", "-q", "app"]
+        ["docker", "compose", "-f", "/opt/owncloud/docker-compose.yml", "ps", "-q", "app"],
+        step="ownCloud-Container über Docker Compose finden",
     ).strip()
     if not container or "\n" in container:
         raise RuntimeError("Der laufende ownCloud-App-Container wurde nicht eindeutig gefunden.")
@@ -133,22 +213,21 @@ def main():
         container,
     ]
 
-    def php(code, payload=None):
-        return json.loads(
-            run(
-                docker + ["php", "-r", BOOTSTRAP + code],
-                data=json.dumps(payload) if payload is not None else None,
-            )
-        )
+    def php(code, payload=None, **kwargs):
+        return run_php(docker, code, payload, **kwargs)
 
-    snapshot = php("""$c=\\OC::$server->getConfig(); echo json_encode([
+    print("Prüfe ownCloud mit der initialisierten Docker-Konsolenumgebung.", flush=True)
+    snapshot = php(
+        """$c=\\OC::$server->getConfig(); echo json_encode([
       'version'=>\\OC_Util::getVersionString(),
       'oidc'=>$c->getSystemValue('openid-connect', null),
       'appVersion'=>$c->getAppValue('openidconnect','installed_version',''),
       'appEnabled'=>\\OC::$server->getAppManager()->isEnabledForUser('openidconnect'),
-      'paths'=>$c->getSystemValue('apps_paths', []),
+      'paths'=>\\OC::$APPSROOTS,
       'marker'=>$c->getSystemValue('julianverse-account-provisioner', null)
-    ], JSON_THROW_ON_ERROR);""")
+    ], JSON_THROW_ON_ERROR);""",
+        step="ownCloud-Konsole starten und Konfiguration lesen",
+    )
     if not snapshot["version"].startswith("10.") or int(snapshot["version"].split(".")[1]) < 12:
         raise RuntimeError("Dieses Skript unterstützt ownCloud Server 10.12–10.x.")
     cfg = dotenv_values(ROOT / ".env")
@@ -169,6 +248,13 @@ def main():
     paths = [p["path"] for p in snapshot["paths"] if p.get("writable")]
     if len(paths) != 1 or not paths[0].startswith("/") or ".." in paths[0].split("/"):
         raise RuntimeError("Das beschreibbare ownCloud-App-Verzeichnis ist nicht eindeutig.")
+    if check_only:
+        print(
+            "Vorprüfung erfolgreich: ownCloud "
+            + snapshot["version"]
+            + ". Es wurde nichts eingerichtet."
+        )
+        return
     backup = Path(tempfile.mkdtemp(prefix="julianverse-account-owncloud.", dir="/var/backups"))
     (backup / "owncloud-before.json").write_text(json.dumps(snapshot, indent=2))
     shutil.copy2(ROOT / ".env", backup / "account.env")
@@ -348,8 +434,15 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="ownCloud mit Julianverse Account verbinden.")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Nur Container und Konsolenkonfiguration prüfen; nichts einrichten.",
+    )
+    options = parser.parse_args()
     try:
-        main()
+        main(check_only=options.check)
     except Exception as error:
         if isinstance(error, RuntimeError):
             print("FEHLER:", error, file=sys.stderr)

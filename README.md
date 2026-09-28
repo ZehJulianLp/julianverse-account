@@ -100,6 +100,19 @@ leeren Prüfkonto. Nur dieses bestätigte Prüfkonto wird danach entfernt. Bei e
 Fehler im SSO-Schritt wird die vorherige Login-Konfiguration wiederhergestellt.
 Ein vollständiger Browser-Login mit einem echten Konto folgt nach der Einrichtung.
 
+Die PHP-Aufrufe laden dieselbe Docker-Konsolenumgebung wie ownClouds eigener
+[`occ`-Wrapper](https://github.com/owncloud-docker/base/blob/master/v20.04/overlay/usr/bin/occ).
+Nur Container und Konfiguration prüfen, ohne die Einrichtung zu beginnen:
+
+```bash
+sudo bash scripts/setup-owncloud.sh --check
+```
+
+Bei fehlgeschlagenen Befehlen nennt das Skript Schritt und Exit-Code. Vollständige
+Fehlerausgaben bleiben in einer nur für root lesbaren Datei unter
+`/var/log/julianverse-owncloud-error-*.log`; die Terminalmeldung enthält keine
+Zugangsdaten.
+
 ### Neue Benutzer
 
 - Passwortregistrierungen erhalten sofort einen gespeicherten Cloud-Auftrag;
