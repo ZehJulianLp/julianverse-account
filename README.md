@@ -47,7 +47,13 @@ mit ihrem bisherigen BrickHoard-Passwort. Neue Nutzer melden sich direkt mit Jul
 Sammlungen und Berechtigungen bleiben in BrickHoard; eine gemeinsame E-Mail-Adresse allein
 führt nie zu einer automatischen Kontoverknüpfung. Die Einrichtung und Migration sind im
 [BrickHoard-README](https://github.com/ZehJulianLp/brickhoard/tree/feat/julianverse-account#julianverse-account-anbinden) beschrieben.
-Unternehmensregister benötigt noch seine eigene OIDC-Anbindung.
+Die OIDC-Anbindung des Unternehmensregisters ist unter
+`/home/srvmgr/unternehmensregister` vorbereitet (Branch `feat/julianverse-account`).
+Der vertrauliche Client nutzt `openid profile` und den Callback
+`https://amt.julianverse.de/auth/julianverse/callback`. Aktiviert wird die geprüfte
+Version mit `sudo bash /home/srvmgr/unternehmensregister/deploy/setup-julianverse.sh`.
+Bestehende Nutzer melden sich mit Discord an und verknüpfen Julianverse in den
+Register-Einstellungen; Firmen und Registerrollen bleiben am bisherigen Konto.
 
 ## Lokal starten
 
