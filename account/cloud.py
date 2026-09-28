@@ -103,8 +103,13 @@ def dav(connection, method, url, **kwargs):
                                 "Die ownCloud-Datei überschreitet die unterstützte Größe von 512 KiB.",
                             )
                         chunks.append(chunk)
+                    # iter_bytes() already decompresses the body. Reusing the wire
+                    # encoding headers would make Response decode it a second time.
+                    headers = response.headers.copy()
+                    for name in ("content-encoding", "content-length", "transfer-encoding"):
+                        headers.pop(name, None)
                     result = httpx.Response(
-                        response.status_code, headers=response.headers, content=b"".join(chunks)
+                        response.status_code, headers=headers, content=b"".join(chunks)
                     )
             if result.status_code in (502, 503, 504) and attempt + 1 < attempts:
                 continue

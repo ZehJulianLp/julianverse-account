@@ -1,3 +1,6 @@
+import gzip
+import json
+
 import httpx
 import pytest
 import respx
@@ -46,6 +49,53 @@ def setup_cloud(app, enabled=False):
 def auth_headers(client):
     token, _ = issue(client)
     return {"Authorization": "Bearer " + token["access_token"]}
+
+
+@respx.mock
+def test_compressed_cloud_json_is_decoded_once_and_keeps_etag(app, logged_in):
+    setup_cloud(app, enabled=True)
+    headers = auth_headers(logged_in)
+    payload = {"schemaVersion": 1, "data": {"notes": "Komprimierte Notizen äöü " * 30}}
+    compressed = gzip.compress(json.dumps(payload, ensure_ascii=False).encode())
+    remote = respx.get(
+        "https://cloud.test/remote.php/dav/files/cloud-user/Julianverse/startpage/notes.json"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            headers={
+                "Content-Encoding": "gzip",
+                "Content-Length": str(len(compressed)),
+                "ETag": '"version-1"',
+            },
+            stream=httpx.ByteStream(compressed),
+        )
+    )
+    response = logged_in.get("/api/sync/startpage/notes", headers=headers)
+    assert response.status_code == 200, response.json
+    assert response.json == payload
+    assert response.headers["ETag"] == '"version-1"'
+    assert "Content-Encoding" not in response.headers
+    assert remote.call_count == 1
+
+
+@respx.mock
+def test_decoded_cloud_size_limit_also_applies_to_compressed_files(app, logged_in):
+    setup_cloud(app, enabled=True)
+    headers = auth_headers(logged_in)
+    payload = {"schemaVersion": 1, "data": {"notes": "a" * (512 * 1024)}}
+    compressed = gzip.compress(json.dumps(payload).encode())
+    respx.get(
+        "https://cloud.test/remote.php/dav/files/cloud-user/Julianverse/startpage/notes.json"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            headers={"Content-Encoding": "gzip"},
+            stream=httpx.ByteStream(compressed),
+        )
+    )
+    response = logged_in.get("/api/sync/startpage/notes", headers=headers)
+    assert response.status_code == 502
+    assert "512 KiB" in response.json["message"]
 
 
 @respx.mock
