@@ -11,7 +11,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from flask import Flask, Response, send_from_directory
+from flask import Flask, Response, request, send_from_directory
 from werkzeug.serving import WSGIRequestHandler, make_server
 
 playwright = pytest.importorskip("playwright.sync_api")
@@ -37,6 +37,15 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
     writes = []
     counter = [0]
     delay = [0]
+    reject_next = [False]
+    rejected = []
+
+    @app.before_request
+    def reject_access_once():
+        if reject_next[0] and request.method == "GET" and request.path.startswith(f"/api/sync/{slug}/"):
+            reject_next[0] = False
+            rejected.append(True)
+            return {"error": "invalid_token"}, 401
 
     def dav(connection, method, url, **kwargs):
         if method == "MKCOL":
@@ -243,6 +252,36 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
                 "Angemeldet als julian"
             )
             another.close()
+            # A temporary session service failure must not look like a forgotten login.
+            session_url = f"{issuer}/oauth/browser/{slug}"
+            page.route(
+                session_url,
+                lambda route: route.fulfill(status=503, content_type="application/json", body="{}"),
+            )
+            page.reload()
+            open_account()
+            playwright.expect(
+                page.get_by_role("button", name="Mit Julianverse anmelden", exact=True)
+            ).to_have_count(0)
+            playwright.expect(
+                page.get_by_role("button", name="Erneut verbinden", exact=True)
+            ).to_be_visible()
+            page.unroute(session_url)
+            page.get_by_role("button", name="Erneut verbinden", exact=True).click()
+            playwright.expect(row.locator(".jv-status")).to_contain_text(
+                "Abgeglichen", timeout=15000
+            )
+            assert len(writes) == 1
+            # A rejected access token is renewed once without dropping the saved session.
+            resource_url = f"{issuer}/api/sync/{slug}/{resource}"
+            reject_next[0] = True
+            with page.expect_response(lambda response: response.url == resource_url and response.status == 401):
+                row.get_by_role("button", name="Jetzt abgleichen").click()
+            playwright.expect(row.locator(".jv-status")).to_contain_text(
+                "Abgeglichen", timeout=15000
+            )
+            assert rejected
+            playwright.expect(page.get_by_text("Angemeldet als julian", exact=True)).to_be_visible()
             context.set_offline(True)
             if slug == "startpage":
                 edit_note("Offline geändert")
@@ -271,7 +310,7 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
                 page.reload()
                 open_account()
                 playwright.expect(
-                    page.get_by_text("Angemeldet als julian", exact=True)
+                    page.get_by_text("Gespeichertes Konto: julian", exact=True)
                 ).to_be_visible()
                 page.locator("#theme-select").select_option("light")
                 page.wait_for_timeout(300)
