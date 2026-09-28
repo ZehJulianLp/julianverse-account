@@ -160,8 +160,23 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
             )
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.on("dialog", lambda dialog: dialog.accept())
+
+            def open_account():
+                page.wait_for_function("window.julianverseReady === true")
+                if slug == "startpage":
+                    page.locator("#openSettings").click()
+                    page.get_by_role("tab", name="Account", exact=True).click()
+                else:
+                    page.locator(".jv-account summary").click()
+
+            def edit_note(value):
+                page.locator("#closeSettings").click()
+                playwright.expect(page.locator("#settingsModal")).to_be_hidden()
+                page.locator("#notesArea").fill(value)
+                open_account()
+
             page.goto(f"{origin}/{slug}/")
-            page.locator(".jv-account summary").click()
+            open_account()
             login = page.get_by_role("button", name="Mit Julianverse anmelden")
             playwright.expect(login).to_be_visible(timeout=20000)
             assert not writes
@@ -204,7 +219,7 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
             assert len(refreshes) == 1
             context.set_offline(True)
             if slug == "startpage":
-                page.locator("#notesArea").fill("Offline geändert")
+                edit_note("Offline geändert")
             else:
                 page.locator("#theme-select").select_option("dark")
             page.wait_for_timeout(1200)
@@ -227,7 +242,7 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
             cloud = json.loads(json.dumps(remote[name][0]))
             if slug == "startpage":
                 cloud["data"]["notes"] = "Vom zweiten Gerät"
-                page.locator("#notesArea").fill("Mein neuer lokaler Stand")
+                edit_note("Mein neuer lokaler Stand")
             else:
                 cloud["data"]["julianverse-weather:settings"]["theme"] = "light"
                 page.locator("#units-select").select_option("imperial")
@@ -280,7 +295,7 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
                 )
                 delay[0] = 1
                 row.get_by_role("button", name="Jetzt abgleichen").click()
-                page.locator("#notesArea").fill("Während Download bearbeitet")
+                edit_note("Während Download bearbeitet")
                 playwright.expect(row.locator(".jv-conflict")).to_be_visible(timeout=15000)
                 assert page.locator("#notesArea").input_value() == "Während Download bearbeitet"
                 delay[0] = 0
@@ -316,7 +331,7 @@ def test_static_app_optional_login_sync_offline_and_conflict(app, monkeypatch, s
             page.reload()
             if slug == "weather":
                 page.locator("#sidebar-toggle").click()
-            page.locator(".jv-account summary").click()
+            open_account()
             playwright.expect(
                 page.get_by_role("button", name="Mit Julianverse anmelden")
             ).to_be_visible()

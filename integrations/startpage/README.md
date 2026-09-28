@@ -1,12 +1,12 @@
 # Startpage mit Julianverse Account
 
 Die statische Startpage nutzt ein lokales JavaScript-Modul für OIDC mit PKCE und
-optionalen ownCloud-Sync. Der Account-Bereich sitzt unter der Uhr. Die App lädt
+optionalen ownCloud-Sync. Der Account-Bereich sitzt unter **Einstellungen → Account**. Die App lädt
 ihre Module lokal und kann ohne Account-Server weiter benutzt werden.
 
 ## Bedienung
 
-1. „Julianverse Account · Cloud-Sync“ öffnen und „Mit Julianverse anmelden“ wählen.
+1. „Einstellungen → Account“ öffnen und „Mit Julianverse anmelden“ wählen.
    Die Anmeldung öffnet ein eigenes Fenster. Der statische Callback gibt den
    einmaligen Code nur an das öffnende Fenster derselben Origin zurück.
 2. Unter „Freigaben im Account verwalten“ die gewünschten Datenarten freigeben.
