@@ -43,6 +43,14 @@ CATALOG = {
         },
     },
     "weather": {"name": "Wetter", "resources": {"settings": "Einstellungen", "locations": "Orte"}},
+    "searxng": {
+        "name": "Julianverse Search",
+        "resources": {
+            "favorites": "Gespeicherte Suchen",
+            "history": "Suchverlauf",
+            "settings": "Sucheinstellungen",
+        },
+    },
 }
 MAX_BYTES = 512 * 1024
 

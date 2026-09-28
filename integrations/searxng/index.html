@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Meine Suche · Julianverse Search</title>
+    <link
+      rel="icon"
+      href="/static/themes/simple/img/favicon.svg"
+      type="image/svg+xml"
+    />
+    <link rel="stylesheet" href="/julianverse/search.css" />
+    <link rel="stylesheet" href="/julianverse/account/panel.css" />
+    <script type="module" src="/julianverse/app.mjs"></script>
+  </head>
+  <body class="jv-search-page">
+    <div class="jv-search">
+      <header class="jv-header">
+        <a href="/" class="jv-brand">Julianverse <span>Search</span></a
+        ><a href="/preferences">Sucheinstellungen</a>
+      </header>
+      <main>
+        <div class="jv-intro">
+          <p class="jv-eyebrow">DEINE SUCHE, DEINE AUSWAHL</p>
+          <h1>Meine Suche</h1>
+          <p>
+            Behalte hilfreiche Suchanfragen. Lokal auf diesem Gerät oder mit
+            deinem Julianverse Account auch unterwegs.
+          </p>
+        </div>
+        <nav class="jv-tabs" aria-label="Bereiche">
+          <a href="#saved-searches">Gespeicherte Suchen</a
+          ><a href="#search-history">Verlauf</a
+          ><a href="#cloud-sync">Account & Sync</a>
+        </nav>
+        <p id="search-status" role="status" aria-live="polite"></p>
+        <section
+          id="saved-searches"
+          class="jv-card"
+          aria-labelledby="saved-title"
+        >
+          <div class="jv-section-heading">
+            <div>
+              <p class="jv-eyebrow">SCHNELL WIEDERFINDEN</p>
+              <h2 id="saved-title">Gespeicherte Suchen</h2>
+            </div>
+            <span id="saved-count" class="jv-count"></span>
+          </div>
+          <form id="save-search" class="jv-save-form">
+            <label
+              >Suchanfrage<input
+                name="q"
+                required
+                maxlength="400"
+                placeholder="Was möchtest du wiederfinden?"
+            /></label>
+            <label
+              >Name <span class="jv-muted">(optional)</span
+              ><input
+                name="label"
+                maxlength="120"
+                placeholder="Zum Beispiel: Ideen fürs Wochenende"
+            /></label>
+            <label
+              >Kategorie<select name="category">
+                <option value="general">Allgemein</option>
+                <option value="images">Bilder</option>
+                <option value="videos">Videos</option>
+                <option value="news">Nachrichten</option>
+                <option value="map">Karten</option>
+                <option value="music">Musik</option>
+                <option value="it">IT</option>
+                <option value="science">Wissenschaft</option>
+                <option value="files">Dateien</option>
+                <option value="social media">Social Media</option>
+              </select></label
+            >
+            <button type="submit" class="jv-primary">Suche speichern</button>
+          </form>
+          <ul id="saved-list" class="jv-list"></ul>
+        </section>
+        <section
+          id="search-history"
+          class="jv-card"
+          aria-labelledby="history-title"
+        >
+          <div class="jv-section-heading">
+            <div>
+              <p class="jv-eyebrow">WEITERSUCHEN</p>
+              <h2 id="history-title">Suchverlauf</h2>
+            </div>
+            <span id="history-state" class="jv-count">Ausgeschaltet</span>
+          </div>
+          <p>
+            Speichert Suchbegriffe und Suchfilter auf diesem Gerät, sobald du
+            den Verlauf aktivierst. Aufgerufene Ergebnisse werden nicht erfasst.
+            Cloud-Sync kannst du unten separat einschalten.
+          </p>
+          <div class="jv-history-controls">
+            <button id="record-history" type="button">Verlauf aktivieren</button
+            ><label
+              >Automatisch löschen nach<select id="history-retention">
+                <option value="7">7 Tagen</option>
+                <option value="30" selected>30 Tagen</option>
+                <option value="90">90 Tagen</option>
+                <option value="0">Nie</option>
+              </select></label
+            ><button id="clear-history" type="button">Verlauf löschen</button>
+          </div>
+          <p class="jv-muted">
+            Bis zu 200 Einträge. Abgelaufene Einträge werden beim Öffnen und
+            während der Nutzung entfernt. Bei aktivem Sync werden Löschungen
+            beim nächsten erfolgreichen Abgleich übernommen.
+          </p>
+          <ul id="history-list" class="jv-list"></ul>
+        </section>
+        <section id="cloud-sync" class="jv-card" aria-labelledby="sync-title">
+          <p class="jv-eyebrow">AUF DEINEN GERÄTEN</p>
+          <h2 id="sync-title">Account & Cloud-Sync</h2>
+          <p>
+            Wähle getrennt, ob gespeicherte Suchen, Verlauf und
+            Sucheinstellungen mit deiner ownCloud abgeglichen werden. Eine
+            Anmeldung allein aktiviert keinen Sync. Die Verlaufserfassung bleibt
+            eine Entscheidung pro Gerät.
+          </p>
+          <div id="julianverse-account" class="jv-account"></div>
+          <p class="jv-muted">
+            Die Sucheinstellungen umfassen Sprache, Darstellung, Suchmaschinen
+            und Filter. Du bearbeitest sie weiterhin in den
+            <a href="/preferences">SearXNG-Einstellungen</a>.
+          </p>
+        </section>
+      </main>
+      <footer>
+        <a href="/">Zur Suche</a
+        ><a href="https://account.julianverse.de">Julianverse Account</a
+        ><span>Lokal nutzbar · Sync freiwillig</span>
+      </footer>
+      <noscript
+        ><p>
+          Für gespeicherte Suchen und Sync wird JavaScript benötigt.
+          <a href="/">Die Suche funktioniert auch ohne JavaScript.</a>
+        </p></noscript
+      >
+    </div>
+  </body>
+</html>

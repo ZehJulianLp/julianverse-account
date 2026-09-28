@@ -1,0 +1,334 @@
+.jv-search-page {
+  margin: 0;
+  background: #f4f6fa;
+  color: #1d283b;
+  font:
+    16px/1.6 system-ui,
+    sans-serif;
+  color-scheme: light;
+}
+.jv-search {
+  --line: #d7deea;
+  --accent: #376baf;
+  --panel: #edf2f9;
+  --muted: #52627a;
+  --card: #fff;
+  max-width: 1120px;
+  margin: auto;
+  padding: 0 28px;
+}
+.jv-search * {
+  box-sizing: border-box;
+}
+.jv-search a {
+  color: #285b9d;
+  text-underline-offset: 4px;
+}
+.jv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 26px 0;
+  border-bottom: 1px solid var(--line);
+}
+.jv-header a {
+  text-decoration: none;
+}
+.jv-brand {
+  color: inherit !important;
+  font-weight: 750;
+  font-size: 1.15rem;
+  letter-spacing: -0.025em;
+}
+.jv-brand span {
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 6px;
+}
+.jv-intro {
+  max-width: 700px;
+  padding: 50px 0 14px;
+}
+.jv-search .jv-eyebrow {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  font-weight: 750;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.jv-search h1 {
+  font-size: clamp(2.3rem, 6vw, 3.8rem);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+  margin: 0 0 18px;
+}
+.jv-search h2 {
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+  margin: 0 0 12px;
+}
+.jv-intro > p:last-child {
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+.jv-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin: 12px 0 28px;
+}
+.jv-tabs a {
+  font-weight: 600;
+}
+.jv-card {
+  background: var(--card);
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  margin: 0 0 24px;
+  scroll-margin-top: 20px;
+}
+.jv-section-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.jv-count {
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--panel);
+  padding: 4px 10px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+.jv-search label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+.jv-search label .jv-muted {
+  display: contents;
+}
+.jv-search :is(input, select, button) {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: inherit;
+  background: var(--card);
+  font: inherit;
+  padding: 9px 12px;
+  max-width: 100%;
+}
+.jv-search :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  font-size: 0.95rem;
+}
+.jv-search button {
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.jv-search button:hover {
+  border-color: var(--accent);
+  background: var(--panel);
+}
+.jv-search button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.jv-search :is(a, button, input, select):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+.jv-search .jv-primary {
+  background: #285b9d;
+  color: #fff;
+  border-color: #285b9d;
+}
+.jv-search .jv-primary:hover {
+  background: #204b85;
+}
+.jv-save-form {
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr 0.8fr auto;
+  align-items: end;
+  gap: 14px;
+  margin: 18px 0 24px;
+}
+.jv-history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px;
+  margin: 22px 0 14px;
+}
+.jv-history-controls label {
+  min-width: 200px;
+}
+.jv-search .jv-muted {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+.jv-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.jv-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+.jv-list .jv-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding-bottom: 0;
+}
+.jv-entry-text {
+  flex: 1;
+  min-width: min(100%, 200px);
+  overflow-wrap: anywhere;
+}
+.jv-entry-text :is(strong, small) {
+  display: block;
+}
+.jv-entry-text p {
+  margin: 2px 0;
+}
+.jv-entry-text small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+.jv-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.jv-search footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0 36px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+#search-status:empty {
+  display: none;
+}
+.jv-search #search-status {
+  border-left: 3px solid var(--accent);
+  padding: 12px 16px;
+  background: var(--panel);
+  overflow-wrap: anywhere;
+}
+.jv-search-navigation {
+  margin: 12px 0;
+  text-align: right;
+}
+#links_on_top .jv-search-link {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  padding: 0.5rem;
+}
+.jv-search-toolbar {
+  margin: 8px 12px 16px;
+}
+.jv-search-toolbar button {
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+}
+.jv-search-notice {
+  padding: 10px 16px;
+  margin: 10px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+}
+@media (max-width: 900px) {
+  .jv-save-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 520px) {
+  .jv-search {
+    padding: 0 16px;
+  }
+  .jv-card {
+    padding: 20px 16px;
+  }
+  .jv-intro {
+    padding-top: 32px;
+  }
+  .jv-save-form {
+    grid-template-columns: 1fr;
+  }
+  .jv-header {
+    font-size: 0.85rem;
+  }
+  .jv-search .jv-account {
+    padding: 10px;
+  }
+}
+html[data-theme="dark"] .jv-search-page,
+html[data-theme="black"] .jv-search-page {
+  background: #101822;
+  color: #e6edf7;
+  color-scheme: dark;
+}
+html:is([data-theme="dark"], [data-theme="black"]) .jv-search {
+  --line: #334156;
+  --accent: #8fbafa;
+  --panel: #223044;
+  --muted: #acbad0;
+  --card: #192333;
+}
+html:is([data-theme="dark"], [data-theme="black"]) .jv-search a {
+  color: #9fc5ff;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="dark"]):not(
+      [data-theme="black"]
+    )
+    .jv-search-page {
+    background: #101822;
+    color: #e6edf7;
+    color-scheme: dark;
+  }
+  html:not([data-theme="light"]):not([data-theme="dark"]):not(
+      [data-theme="black"]
+    )
+    .jv-search {
+    --line: #334156;
+    --accent: #8fbafa;
+    --panel: #223044;
+    --muted: #acbad0;
+    --card: #192333;
+  }
+  html:not([data-theme="light"]):not([data-theme="dark"]):not(
+      [data-theme="black"]
+    )
+    .jv-search
+    a {
+    color: #9fc5ff;
+  }
+}

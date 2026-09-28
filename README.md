@@ -41,6 +41,10 @@ und ownCloud-Sync. Datenzuordnung, Bedienung und Einbauhinweise liegen unter
 [integrations/weather](integrations/weather/README.md). Die Account-Installation
 verändert diese statischen Apps nicht automatisch; die Module werden mit den
 jeweiligen App-Checkouts ausgeliefert.
+SearXNG erhält mit [integrations/searxng](integrations/searxng/README.md) einen
+optionalen Bereich **Meine Suche** für gespeicherte Suchen, pausierbaren Verlauf
+und den Abgleich der Sucheinstellungen. `scripts/setup-searxng.sh` erweitert den
+bestehenden Nginx-Proxy; der Such-Container läuft weiter.
 BrickHoard ist als vertraulicher OIDC-Client angebunden (`openid profile email`, PKCE S256).
 Bestehende Nutzer verknüpfen ihren Zugang in BrickHoard unter **Mein Konto → Julianverse Account**
 mit ihrem bisherigen BrickHoard-Passwort. Neue Nutzer melden sich direkt mit Julianverse an.
