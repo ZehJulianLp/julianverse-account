@@ -41,7 +41,13 @@ und ownCloud-Sync. Datenzuordnung, Bedienung und Einbauhinweise liegen unter
 [integrations/weather](integrations/weather/README.md). Die Account-Installation
 verändert diese statischen Apps nicht automatisch; die Module werden mit den
 jeweiligen App-Checkouts ausgeliefert.
-BrickHoard und Unternehmensregister benötigen noch ihre eigene OIDC-Anbindung.
+BrickHoard ist als vertraulicher OIDC-Client angebunden (`openid profile email`, PKCE S256).
+Bestehende Nutzer verknüpfen ihren Zugang in BrickHoard unter **Mein Konto → Julianverse Account**
+mit ihrem bisherigen BrickHoard-Passwort. Neue Nutzer melden sich direkt mit Julianverse an.
+Sammlungen und Berechtigungen bleiben in BrickHoard; eine gemeinsame E-Mail-Adresse allein
+führt nie zu einer automatischen Kontoverknüpfung. Die Einrichtung und Migration sind im
+[BrickHoard-README](https://github.com/ZehJulianLp/brickhoard/tree/feat/julianverse-account#julianverse-account-anbinden) beschrieben.
+Unternehmensregister benötigt noch seine eigene OIDC-Anbindung.
 
 ## Lokal starten
 
