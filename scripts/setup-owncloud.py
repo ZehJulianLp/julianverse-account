@@ -75,7 +75,12 @@ def run(args, *, data=None, step=None):
     step = step or ("ownCloud-Containerbefehl" if args[0] == "docker" else "Account-Dienstbefehl")
     try:
         result = subprocess.run(
-            args, input=data, text=True, capture_output=True, check=False, timeout=180
+            args,
+            input=data if data is not None else "",
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=180,
         )
     except subprocess.TimeoutExpired:
         raise RuntimeError(step + ": Zeitlimit von 180 Sekunden überschritten.") from None
@@ -107,13 +112,45 @@ def run_php(docker, code, payload=None, *, step="ownCloud-Konfiguration ausführ
     output = run(
         docker
         + ["bash", "-c", PHP_RUNNER, "julianverse-php", "/etc/entrypoint.d", BOOTSTRAP + code],
-        data=json.dumps(payload) if payload is not None else None,
+        # None is JSON null, not an inherited terminal. The rollback reads
+        # STDIN too and must receive EOF when the previous config was absent.
+        data=json.dumps(payload),
         step=step,
     )
     try:
         return json.loads(output)
     except ValueError:
         raise RuntimeError(step + ": Die Konsole hat kein gültiges JSON geliefert.") from None
+
+
+def verify_sso_redirect(client, cloud, issuer, client_id):
+    # ownCloud's router registers loginFlow#login twice. The later /redirect
+    # route is the effective public route, for both login start and callback.
+    callback = cloud + "/index.php/apps/openidconnect/redirect"
+    response = client.get(callback)
+    location = urlsplit(response.headers.get("location", ""))
+    params = parse_qs(location.query)
+    checks = {
+        "HTTP-Weiterleitung": response.status_code in (302, 303),
+        "Account-Ziel": location.scheme + "://" + location.netloc + location.path
+        == issuer + "/oauth/authorize",
+        "PKCE S256": params.get("code_challenge_method") == ["S256"]
+        and len(params.get("code_challenge", [])) == 1
+        and bool(params["code_challenge"][0]),
+        "Nonce": len(params.get("nonce", [])) == 1 and bool(params["nonce"][0]),
+        "State": len(params.get("state", [])) == 1 and bool(params["state"][0]),
+        "Authorization Code": params.get("response_type") == ["code"],
+        "Client-ID": params.get("client_id") == [client_id],
+        "Callback": params.get("redirect_uri") == [callback],
+        "ownCloud-Freigabe": "owncloud" in params.get("scope", [""])[0].split(),
+    }
+    failed = [name for name, ok in checks.items() if not ok]
+    if failed:
+        # Report checks, not full redirect URLs: these contain session values.
+        raise RuntimeError(
+            f"ownCloud-SSO-Prüfung fehlgeschlagen (HTTP {response.status_code}): "
+            + ", ".join(failed)
+        )
 
 
 def verify_provisioning(cloud, service_user, password, group):
@@ -359,19 +396,7 @@ def main(check_only=False):
             discovery.raise_for_status()
             if discovery.json().get("introspection_endpoint") != issuer + "/oauth/introspect":
                 raise RuntimeError("Bitte zuerst die neue Account-Version installieren.")
-            response = client.get(cloud + "/index.php/apps/openidconnect/login")
-            location = urlsplit(response.headers.get("location", ""))
-            params = parse_qs(location.query)
-            if (
-                response.status_code not in (302, 303)
-                or location.scheme + "://" + location.netloc + location.path
-                != issuer + "/oauth/authorize"
-                or params.get("code_challenge_method") != ["S256"]
-                or not params.get("nonce")
-                or params.get("client_id") != [bundle["client_id"]]
-                or "owncloud" not in params.get("scope", [""])[0].split()
-            ):
-                raise RuntimeError("Der ownCloud-Login hat keine passende SSO-Anfrage geliefert.")
+            verify_sso_redirect(client, cloud, issuer, bundle["client_id"])
             response = client.get(
                 cloud + "/ocs/v1.php/cloud/users/" + bundle["provision_user"],
                 params={"format": "json"},
@@ -408,7 +433,7 @@ def main(check_only=False):
             raise RuntimeError("Die Account-App ist nach dem Neustart nicht erreichbar.")
         run(user_env + ["systemctl", "--user", "enable", "--now", "julianverse-cloud.timer"])
         run(user_env + ["systemctl", "--user", "start", "--no-block", "julianverse-cloud.service"])
-    except Exception:
+    except (Exception, KeyboardInterrupt):
         print(
             "SSO-Einrichtung fehlgeschlagen. Stelle die vorherige Login-Konfiguration wieder her.",
             flush=True,
@@ -418,12 +443,16 @@ def main(check_only=False):
             "if ($p===null) {$c->deleteSystemValue('openid-connect');} else {$c->setSystemValue('openid-connect',$p);} "
             "echo json_encode(['ok'=>true]);",
             snapshot["oidc"],
+            step="Vorherige ownCloud-Login-Konfiguration wiederherstellen",
         )
         if not snapshot["appEnabled"]:
             run(docker + ["occ", "app:disable", "openidconnect"])
         shutil.copy2(backup / "account.env", ROOT / ".env")
         os.chown(ROOT / ".env", account.pw_uid, account.pw_gid)
         run(user_env + ["systemctl", "--user", "restart", "julianverse-account.service"])
+        print(
+            "Vorherige Login-Konfiguration wiederhergestellt. Sicherung: " + str(backup), flush=True
+        )
         raise
     print("Fertig: ownCloud bietet die Anmeldung mit Julianverse Account an.")
     print(
@@ -443,6 +472,12 @@ if __name__ == "__main__":
     options = parser.parse_args()
     try:
         main(check_only=options.check)
+    except KeyboardInterrupt:
+        print(
+            "Abgebrochen. Die SSO-Einrichtung ist nicht als erfolgreich bestätigt; beim nächsten Aufruf wird der Zustand erneut geprüft.",
+            file=sys.stderr,
+        )
+        sys.exit(130)
     except Exception as error:
         if isinstance(error, RuntimeError):
             print("FEHLER:", error, file=sys.stderr)

@@ -6,7 +6,7 @@
   {% if cloud and cloud.state == 'ready' %}
     <p>Cloud-Konto: <strong>{{ cloud.username }}</strong></p>
     <p>{{ '1 GB Speicherplatz' if cloud.managed else 'Dein vorhandenes Konto mit bisherigen Dateien, Freigaben und Speicherlimit.' }}</p>
-    {% if cloud_sso_enabled %}<a class="button primary" href="{{ cloud_url }}/index.php/apps/openidconnect/login">Mit Julianverse anmelden ↗</a>{% else %}<div class="notice">Die Anmeldung über Julianverse wird noch auf dem Server eingerichtet.</div>{% endif %}
+    {% if cloud_sso_enabled %}<a class="button primary" href="{{ cloud_url }}/index.php/apps/openidconnect/redirect">Mit Julianverse anmelden ↗</a>{% else %}<div class="notice">Die Anmeldung über Julianverse wird noch auf dem Server eingerichtet.</div>{% endif %}
     <a class="button secondary spaced" href="{{ cloud_url }}" rel="noreferrer">ownCloud öffnen ↗</a>
     <form method="post" action="{{ url_for('cloud.disconnect') }}" class="spaced">{{ csrf() }}<button class="danger-outline">{{ 'Sync ausschalten' if cloud.managed else 'Verknüpfung lösen' }}</button></form>
     {% if cloud.managed %}<p class="help">Für die ownCloud-App oder WebDAV kannst du nach der Anmeldung in ownCloud ein App-Passwort erstellen.</p>{% endif %}

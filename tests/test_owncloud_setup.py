@@ -4,7 +4,9 @@ import os
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlencode
 
+import httpx
 import pytest
 
 SPEC = importlib.util.spec_from_file_location(
@@ -134,3 +136,66 @@ def test_check_only_stops_before_any_setup_changes(monkeypatch, tmp_path, capsys
     assert len(commands) == 1
     assert "Vorprüfung erfolgreich" in capsys.readouterr().out
     assert [p.name for p in tmp_path.iterdir()] == [".env"]
+
+
+def test_rollback_of_absent_config_sends_json_null(monkeypatch):
+    def check_stdin(args, **kwargs):
+        assert kwargs["data"] == "null"
+        return '{"ok":true}'
+
+    monkeypatch.setattr(setup, "run", check_stdin)
+    assert setup.run_php(["docker", "exec", "fixture"], "read_and_restore();", None) == {"ok": True}
+
+
+def test_commands_without_payload_close_stdin(monkeypatch):
+    def check_stdin(args, **kwargs):
+        assert kwargs["input"] == ""
+        return subprocess.CompletedProcess(args, 0, "done", "")
+
+    monkeypatch.setattr(setup.subprocess, "run", check_stdin)
+    assert setup.run(["fixture-command"]) == "done"
+
+
+@pytest.mark.parametrize(
+    "invalid", [None, "normal-login", "pkce", "nonce", "client", "callback", "scope"]
+)
+def test_sso_uses_effective_route_and_checks_authentication_parameters(invalid):
+    cloud, issuer = "https://cloud.test", "https://account.test"
+    params = dict(
+        client_id="fixture-client",
+        scope="openid profile email owncloud",
+        redirect_uri=cloud + "/index.php/apps/openidconnect/redirect",
+        response_type="code",
+        code_challenge="fixture-challenge",
+        code_challenge_method="S256",
+        nonce="private-nonce",
+        state="private-state",
+    )
+    if invalid == "pkce":
+        params["code_challenge_method"] = "plain"
+    if invalid == "nonce":
+        params.pop("nonce")
+    if invalid == "client":
+        params["client_id"] = "another-client"
+    if invalid == "callback":
+        params["redirect_uri"] = "https://unexpected.test/callback"
+    if invalid == "scope":
+        params["scope"] = "openid profile email"
+    location = (
+        cloud + "/login"
+        if invalid == "normal-login"
+        else issuer + "/oauth/authorize?" + urlencode(params)
+    )
+
+    def respond(request):
+        assert str(request.url) == cloud + "/index.php/apps/openidconnect/redirect"
+        return httpx.Response(302, headers={"Location": location})
+
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        if invalid is None:
+            setup.verify_sso_redirect(client, cloud, issuer, "fixture-client")
+        else:
+            with pytest.raises(RuntimeError, match="SSO-Prüfung fehlgeschlagen") as failure:
+                setup.verify_sso_redirect(client, cloud, issuer, "fixture-client")
+            assert "private-state" not in str(failure.value)
+            assert "private-nonce" not in str(failure.value)
