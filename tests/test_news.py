@@ -147,6 +147,17 @@ def test_news_proxy_patch_is_repeatable_and_changes_only_news_routes():
     helpers = runpy.run_path(str(ROOT / "scripts/setup-news-proxy.py"))
     account = (ROOT / "deploy/account.nginx.conf").read_text()
     assert helpers["patch_account"](account) == account
+    status_start = account.index("    location = /api/sync/news {\n")
+    status_end = account.index("    location ^~ /api/sync/news/ {", status_start)
+    status = account[status_start:status_end]
+    # Upgrade the already-installed News location, not just fresh installations.
+    legacy = account[:status_start] + account[status_end:]
+    assert helpers["patch_account"](legacy) == account
+    assert "proxy_pass http://127.0.0.1:8096;" in status
+    assert "return 301" not in status
+    fresh_start = account.index("    # Julianverse News sync\n")
+    fresh_end = account.index("    location / {\n", fresh_start)
+    assert helpers["patch_account"](account[:fresh_start] + account[fresh_end:]) == account
     assert "client_max_body_size 1m;" in account and "client_max_body_size 8m;" in account
     original = "http {\n server { listen 443 ssl; server_name julianverse.de; root /srv/http; }\n server { listen 443 ssl; server_name other.test; }\n}"
     patched = helpers["patch_main"](original)

@@ -69,6 +69,9 @@ Der Nginx-Schritt sichert die beiden betroffenen Konfigurationen, prüft sie und
 lädt Nginx neu. Bei einem Fehler stellt er sie wieder her. Er erlaubt 8 MiB nur
 unter `/api/sync/news/`; am Callback setzt er `no-store`, `no-referrer` und schaltet
 das Zugriffslog aus. Zertifikate und andere Dienste werden nicht neu eingerichtet.
+Die Freigabe-Abfrage `/api/sync/news` hat eine eigene exakte Proxy-Regel, damit
+Nginx dort keinen abschließenden Slash ergänzt und den CORS-Preflight unterbricht.
+Das Skript ergänzt diese Regel auch bei einer bereits eingerichteten News-Anbindung.
 
 ## Leichte Prüfungen ohne Browser
 

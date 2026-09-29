@@ -17,7 +17,9 @@ run = helpers["run"]
 
 
 def patch_account(text):
-    if "# Julianverse News sync" in text:
+    marker = "    # Julianverse News sync\n"
+    status_location = "    location = /api/sync/news {\n"
+    if marker in text and status_location in text:
         return text
     anchor = "    location / {\n"
     if text.count(anchor) != 1 or "server_name account.julianverse.de;" not in text:
@@ -27,8 +29,15 @@ def patch_account(text):
     body = text[start + 1 : end - 1]
     if "proxy_pass http://127.0.0.1:8096;" not in body:
         raise RuntimeError("Der erwartete Account-Upstream fehlt.")
+    # The exact status route prevents Nginx from adding a trailing slash before
+    # proxying. That automatic redirect would break the browser's CORS preflight.
+    status = status_location.rstrip("\n") + body + "}\n\n"
+    if marker in text:
+        return text.replace(marker, marker + status, 1)
     extra = (
-        "    # Julianverse News sync\n    location ^~ /api/sync/news/ {\n        client_max_body_size 8m;"
+        marker
+        + status
+        + "    location ^~ /api/sync/news/ {\n        client_max_body_size 8m;"
         + body
         + "}\n\n"
     )
@@ -96,7 +105,7 @@ def main():
             run(["nginx", "-t"])
             run(["systemctl", "reload", "nginx"])
             raise
-        print("News-Callback geschützt; News-Sync erlaubt bis zu 8 MiB pro Datei.")
+        print("News-Callback geschützt; News-Status ohne Umleitung; News-Dateien bis zu 8 MiB.")
 
 
 if __name__ == "__main__":
