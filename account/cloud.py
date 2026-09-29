@@ -297,6 +297,8 @@ def disconnect():
 @bp.get("/sync")
 @login_required
 def settings():
+    from .developer import catalog_for
+
     prefs = {
         (p.app_slug, p.resource): p
         for p in db.session.scalars(
@@ -305,7 +307,7 @@ def settings():
     }
     return render_template(
         "sync.html",
-        catalog=CATALOG,
+        catalog=catalog_for(g.user),
         preferences=prefs,
         cloud=db.session.get(CloudConnection, g.user.id),
     )
@@ -314,14 +316,17 @@ def settings():
 @bp.post("/sync/preferences")
 @login_required
 def preferences():
+    from .developer import catalog_for
+
     connection = db.session.get(CloudConnection, g.user.id)
     if not connection or connection.state != "ready":
         abort(409, "Bitte verbinde zuerst ownCloud.")
     selected = set(request.form.getlist("resources"))
-    allowed = {f"{app}/{res}" for app, entry in CATALOG.items() for res in entry["resources"]}
+    catalog = catalog_for(g.user)
+    allowed = {f"{app}/{res}" for app, entry in catalog.items() for res in entry["resources"]}
     if not selected <= allowed:
         abort(400)
-    for app, entry in CATALOG.items():
+    for app, entry in catalog.items():
         for resource in entry["resources"]:
             pref = db.session.scalar(
                 db.select(SyncPreference).where(
@@ -347,13 +352,20 @@ def preferences():
 
 
 def authorize_sync(app_slug, resource=None):
+    from .developer import sync_resources
     from .oidc import bearer_user
 
-    if app_slug not in CATALOG or (resource and resource not in CATALOG[app_slug]["resources"]):
-        abort(404)
     user, token = bearer_user("sync")
     if token.client.slug != app_slug:
         abort(403, "Dieses App-Token darf nur auf den eigenen App-Ordner zugreifen.")
+    resources = sync_resources(token.client)
+    if (not resources and not token.client.developer_app) or (
+        resource and resource not in resources
+    ):
+        abort(404)
+    if token.client.developer_app:
+        g.developer_sync_app = token.client.developer_app
+    g.sync_resources = resources
     connection = db.session.get(CloudConnection, user.id)
     if not connection or connection.state != "ready":
         abort(409, "ownCloud ist nicht verbunden.")
@@ -394,8 +406,7 @@ def status(app_slug):
         "app": app_slug,
         "subject": user.id,
         "resources": {
-            r: next((p.enabled for p in prefs if p.resource == r), False)
-            for r in CATALOG[app_slug]["resources"]
+            r: next((p.enabled for p in prefs if p.resource == r), False) for r in g.sync_resources
         },
     }
 

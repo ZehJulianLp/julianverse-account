@@ -25,9 +25,51 @@ ohne Anmeldung lokal nutzbar; eine Anmeldung aktiviert keinen Sync.
 - Sync-Freigaben je App und Datenart, WebDAV-Dateizugriffe mit ETag-Konfliktschutz.
 - Browser-SDK mit lokaler IndexedDB-Arbeitskopie, Offline-Warteschlange,
   ausdrücklicher Konfliktlösung und Trennung verschiedener Konten.
+- **Meine Apps**: Eigene öffentliche PKCE-Clients, private oder per Link geteilte
+  Apps, Testmodus, eigene Sync-Datenarten und eine herunterladbare statische Vorlage.
+- Entwickler sehen aggregierte Nutzung und begrenzte technische Fehler ohne
+  Nutzerinhalte. Nutzer können eigene App-Dateien herunterladen oder ausdrücklich
+  löschen, auch nachdem der App-Zugriff widerrufen wurde.
 - Kontodatenexport und Kontolöschung. ownCloud-Dateien bleiben dabei erhalten.
 - Nginx-Einrichtung mit `certbot certonly --standalone`, Sicherung und Rücknahme
   einer fehlerhaften Proxy-Konfiguration; Wartungsmeldung bis zum App-Start.
+
+### Eigene Apps
+
+Unter `/developer/apps` können Konten mit bestätigter E-Mail bis zu 20 eigene
+Apps registrieren. Die App-ID und damit der ownCloud-Ordner werden zufällig und
+unveränderlich vergeben. Eine App hat bis zu zehn Datenarten mit Titeln und
+Beschreibungen; jede JSON-Datei darf höchstens 512 KiB groß sein. Neue Datenarten
+erhalten keine automatischen Nutzerfreigaben. „Privat“ und Testmodus beschränken
+die Anmeldung auf den Ersteller. „Per Link teilbar“ ohne Testmodus erlaubt anderen
+Konten eine ausdrücklich bestätigte Anmeldung; es gibt noch kein öffentliches
+Verzeichnis, App-Hosting oder eine Eigentumsübertragung.
+
+Die Download-Vorlage enthält denselben Account-/Sync-Kern wie die vorhandenen
+Apps, eine öffentliche Konfiguration und einen lokalen JSON-Editor.
+[SDK und Einbauhinweise](integrations/sdk/README.md) liegen auch unter
+`/developer/docs`. Externe Domains können von Browserregeln für Drittanbieter-Cookies
+betroffen sein; dann braucht die Wiederanmeldung einen Klick auf den Anmeldebutton.
+
+Die Migration `d018cb921742` ergänzt drei Tabellen, ohne bestehende Konten,
+Sitzungen, Clients oder ownCloud-Verknüpfungen umzuschreiben. Vor dem Upgrade eine
+konsistente Sicherung mit `flask --app wsgi backup-db …` erstellen, dann
+`flask --app wsgi db upgrade` ausführen und den Account-Dienst neu laden.
+Eine zusätzliche Nginx-Regel ist für eigene Apps nicht nötig.
+
+Beim Deaktivieren, Löschen oder Ändern der Rücksprung-/Zugriffsregeln werden App-Tokens,
+offene Codes, Zustimmungen und Sync-Freigaben widerrufen. App-Löschungen behalten
+einen gesperrten Eintrag mit unveränderlicher ID, damit Nutzer ihre Dateien unter
+„Apps & Zugriff“ weiter selbst verwalten können. Ein gelöschter oder gesperrter
+Ersteller gibt seine Apps nicht für andere Nutzer frei. Entwickler erhalten
+keinen Zugriff auf Cloud-Dateien oder Zugangsdaten anderer Nutzer.
+
+Prüfungen ohne Browser:
+
+```bash
+.venv/bin/pytest -q tests/test_developer.py tests/test_migration.py
+node --test tests/sdk.test.mjs tests/sync.test.mjs
+```
 
 ### Noch separat einzurichten
 

@@ -1,0 +1,28 @@
+{% extends 'base.html' %}{% from 'macros.html' import csrf, field, heading %}
+{% block title %}{{ item.client.client_name }}{% endblock %}
+{% block content %}
+{{ heading('MEINE APPS', icons[item.icon] ~ ' ' ~ item.client.client_name, item.description) }}
+<div class="form-actions"><a class="button secondary" href="{{ url_for('developer.edit', slug=item.client.slug) }}">Bearbeiten</a><a class="button secondary" href="{{ item.website }}" rel="noopener noreferrer" target="_blank">App öffnen ↗</a><a href="{{ url_for('developer.index') }}">Alle eigenen Apps</a></div>
+<div class="grid two">
+<section class="card"><h2>Anmeldung & Adresse</h2>
+<p><strong>{{ 'Aktiv' if item.client.enabled else 'Deaktiviert' }}</strong> · {{ 'Privat' if item.visibility == 'private' else 'Per Link teilbar' }}{% if item.test_mode %} · Testmodus{% endif %}</p>
+<label>Öffentliche Client-ID<input readonly value="{{ item.client_id }}"></label>
+<label>App-ID und ownCloud-Ordner<input readonly value="{{ item.client.slug }}"></label>
+<label>App-Link<input readonly value="{{ url_for('developer.shared', slug=item.client.slug, _external=true) }}"></label>
+<p class="help">Der Link ist für andere Nutzer erreichbar, wenn du „Per Link teilbar“ wählst und den Testmodus ausschaltest. Es gibt kein öffentliches Verzeichnis.</p>
+<p class="help">Anmeldung: PKCE/S256 ohne Client-Secret. Freigaben: Konto-ID, Profil und separat aktivierter Sync.</p>
+</section>
+<section class="card"><h2>Vorlage & SDK</h2><p>Lade eine statische Beispiel-App mit lokalem JSON-Editor, Account-Bereich, Callback-Seite und allen benötigten Modulen herunter.</p>
+<a class="button primary" href="{{ url_for('developer.starter', slug=item.client.slug) }}">Beispiel-App herunterladen (.zip)</a>
+<p class="help">Die Vorlage enthält deine öffentlichen App-Einstellungen. Nach Änderungen an Datenarten oder Callback-Adressen neu herunterladen oder config.mjs anpassen.</p>
+<a href="{{ url_for('developer.docs') }}">SDK-Anleitung und Grenzen →</a>
+</section>
+</div>
+<section class="card"><h2>Nutzung</h2><div class="grid two"><p><strong>{{ users }}</strong> verbundene Konten</p><p><strong>{{ item.read_count }}</strong> erfolgreiche Leseanfragen · <strong>{{ item.write_count }}</strong> Uploads</p></div><p class="help">Letzte erfolgreiche Nutzung: {{ item.last_used|date }}. Gezählt werden authentifizierte Sync-Anfragen, keine Inhalte, IP-Adressen oder Nutzerprofile.</p>
+<details><summary>Letzte technische Fehler</summary>{% for error in errors %}<p>{{ error.created_at|date }} · {{ error.operation }} · HTTP {{ error.status }}</p>{% else %}<p>Noch keine Fehler erfasst.</p>{% endfor %}<p class="help">403: Freigabe fehlt. 409: Verbindung oder Datei prüfen. 412: Dateikonflikt. 413: Datei zu groß. 429: Zu viele Anfragen. 502: ownCloud-Anfrage fehlgeschlagen. 507: Speicher voll. Es werden höchstens 100 Fehler ohne Nutzerdaten gespeichert.</p></details></section>
+<section class="card"><h2>Datenarten</h2><p>Nutzer geben jede Datenart einzeln frei. Jede Datei liegt in ihrer eigenen ownCloud unter <code>Julianverse/{{ item.client.slug }}/</code> und zählt zu ihrem Speicherlimit.</p>
+{% for resource in item.resources %}<details class="resource-editor"><summary>{{ resource.label }} · {{ resource.key }}.json{% if not resource.enabled %} · deaktiviert{% endif %}</summary><form method="post" action="{{ url_for('developer.resources', slug=item.client.slug) }}" class="stack">{{ csrf() }}<input type="hidden" name="key" value="{{ resource.key }}">{{ field('label', 'Titel', value=resource.label) }}{{ field('description', 'Beschreibung für Nutzer', value=resource.description, required=false) }}<label class="check-row"><span>Für neue Freigaben verfügbar</span><input type="checkbox" name="enabled" {% if resource.enabled %}checked{% endif %}></label><button class="secondary">Datenart speichern</button></form></details>{% endfor %}
+{% if item.resources|length < 10 %}<details {% if not item.resources %}open{% endif %}><summary>Datenart hinzufügen</summary><form method="post" action="{{ url_for('developer.resources', slug=item.client.slug) }}" class="stack">{{ csrf() }}{{ field('key', 'Unveränderlicher Schlüssel', placeholder='notes') }}{{ field('label', 'Titel', placeholder='Meine Notizen') }}{{ field('description', 'Beschreibung für Nutzer', placeholder='Notiztexte und ihre Reihenfolge', required=false) }}<input type="hidden" name="enabled" value="on"><button class="primary">Hinzufügen</button></form></details>{% endif %}
+<p class="help">Bis zu zehn Datenarten und 512 KiB pro JSON-Datei. Deaktivieren stoppt Zugriffe und entfernt Freigaben; Nutzer können vorhandene Dateien weiterhin selbst herunterladen oder löschen.</p></section>
+<section class="card"><h2>App-Zugriff verwalten</h2><form method="post" action="{{ url_for('developer.state', slug=item.client.slug) }}">{{ csrf() }}<button class="secondary" name="action" value="{{ 'disable' if item.client.enabled else 'enable' }}">{{ 'App deaktivieren' if item.client.enabled else 'App wieder aktivieren' }}</button></form><p class="help">Deaktivieren widerruft alle Anmeldungen und Sync-Freigaben dieser App.</p><details><summary>App löschen</summary><form method="post" action="{{ url_for('developer.state', slug=item.client.slug) }}" class="stack">{{ csrf() }}{{ field('confirmation', 'Zur Bestätigung den App-Namen eingeben') }}<button class="danger-outline" name="action" value="delete">App endgültig löschen</button></form><p class="help">Die App-ID wird nicht erneut vergeben. Cloud-Dateien gehören den Nutzern und bleiben über „Apps & Zugriff“ verwaltbar.</p></details></section>
+{% endblock %}

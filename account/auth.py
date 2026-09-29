@@ -1,3 +1,4 @@
+import json
 import re
 import secrets
 
@@ -24,6 +25,7 @@ from .extensions import db
 from .models import Challenge, DiscordIdentity, MailAction, Passkey, User, digest, now
 from .security import (
     browser_binding,
+    decrypt,
     fresh_required,
     login_required,
     make_challenge,
@@ -126,6 +128,7 @@ def register():
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     target = safe_next(request.values.get("next"))
+    g.csp_next = target
     if g.user:
         return redirect(target)
     if request.method == "POST":
@@ -151,6 +154,7 @@ def second_factor():
     item = db.session.get(Challenge, session.get("pending_login", ""))
     if not item or item.used or item.expires_at <= now() or item.browser_hash != browser_binding():
         return redirect(url_for("auth.login"))
+    g.csp_next = safe_next(json.loads(decrypt(item.payload)).get("next"))
     user = db.session.get(User, item.user_id)
     if not user or not user.enabled:
         abort(403)
@@ -187,6 +191,7 @@ def logout():
 @login_required
 def reauthenticate():
     target = safe_next(request.values.get("next"))
+    g.csp_next = target
     if request.method == "POST":
         rate_limit("reauth", 8, 300)
         if g.user.check_password(request.form.get("password", "")) and (

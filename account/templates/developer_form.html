@@ -1,0 +1,17 @@
+{% extends 'base.html' %}{% from 'macros.html' import csrf, field, heading %}
+{% block title %}{{ 'App bearbeiten' if item else 'App anlegen' }}{% endblock %}
+{% block content %}
+{{ heading('MEINE APPS', 'App bearbeiten' if item else 'App anlegen', 'Registriere die Adresse deiner Webapp. Eine Vorlage mit Anmeldung und freiwilligem Sync kannst du danach herunterladen.') }}
+<form method="post" class="card stack">{{ csrf() }}
+{{ field('name', 'Name', value=item.client.client_name if item else '', placeholder='Mein Notizbuch') }}
+<label>Beschreibung<textarea name="description" rows="3" maxlength="500">{{ item.description if item else '' }}</textarea></label>
+<label>Icon<select name="icon">{% for value, icon in icons.items() %}<option value="{{ value }}" {% if item and item.icon == value %}selected{% endif %}>{{ icon }}</option>{% endfor %}</select></label>
+{{ field('website', 'App-Adresse', type='url', value=item.website if item else '', placeholder='https://meine-app.example/') }}
+<label>Erlaubte Login-Rücksprungadressen<textarea name="callbacks" required rows="3" placeholder="https://meine-app.example/account-callback.html">{{ item.client.redirect_uris|join('\n') if item else '' }}</textarea></label>
+<p class="help">Eine Adresse pro Zeile, bis zu fünf. Protokoll, Host und Port müssen zur App-Adresse passen. Die Vorlage verwendet account-callback.html im App-Verzeichnis. Eigene Apps benötigen eine eigene Origin, wenn ihr Code von anderen Personen stammt.</p>
+<label>Sichtbarkeit<select name="visibility"><option value="private" {% if not item or item.visibility == 'private' %}selected{% endif %}>Privat – nur ich</option><option value="unlisted" {% if item and item.visibility == 'unlisted' %}selected{% endif %}>Per Link teilbar – angemeldete Nutzer</option></select></label>
+<label class="check-row"><span><strong>Testmodus</strong><small>Nur dein Konto kann sich anmelden. HTTP auf localhost ist erlaubt.</small></span><input type="checkbox" name="test_mode" {% if not item or item.test_mode %}checked{% endif %}></label>
+{% if item %}<p class="help">Bei Änderungen an Rücksprungadressen, Testmodus oder Sichtbarkeit werden bestehende App-Zugänge und Sync-Freigaben widerrufen.</p>{% endif %}
+<div class="form-actions"><a href="{{ url_for('developer.index') }}">Zurück</a><button class="primary">{{ 'Speichern' if item else 'App anlegen' }}</button></div>
+</form>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends 'base.html' %}{% from 'macros.html' import heading %}
+{% block title %}Meine Apps{% endblock %}
+{% block content %}
+{{ heading('DEIN ENTWICKLERBEREICH', 'Meine Apps', 'Verbinde deine eigenen Webapps mit Julianverse. Jeder Nutzer entscheidet selbst über Anmeldung und Cloud-Sync.') }}
+<div class="form-actions"><a class="button primary" href="{{ url_for('developer.create') }}">App anlegen</a><a href="{{ url_for('developer.docs') }}">SDK & Anleitung</a></div>
+<div class="grid two">
+{% for item in apps %}<section class="card">
+  <div class="section-head"><h2>{{ icons[item.icon] }} {{ item.client.client_name }}</h2><span class="badge">{{ 'Aktiv' if item.client.enabled else 'Deaktiviert' }}</span></div>
+  <p>{{ item.description or 'Noch keine Beschreibung.' }}</p>
+  <p class="help">{{ 'Privat' if item.visibility == 'private' else 'Per Link teilbar' }}{% if item.test_mode %} · Testmodus: nur du{% endif %}</p>
+  <a class="button secondary" href="{{ url_for('developer.detail', slug=item.client.slug) }}">App verwalten →</a>
+</section>{% else %}<section class="card empty"><h2>Deine erste App</h2><p>Trage ihre Adresse ein, definiere ihre Datenarten und lade eine fertige Beispiel-App mit SDK herunter.</p></section>{% endfor %}
+</div>
+{% endblock %}

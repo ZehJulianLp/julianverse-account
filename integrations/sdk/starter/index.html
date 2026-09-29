@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Meine Julianverse-App</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="account/panel.css" />
+    <script type="module" src="app.mjs"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p>DEINE APP · LOCAL FIRST</p>
+        <h1 id="app-name">Meine App</h1>
+        <p>
+          Deine Änderungen werden zuerst auf diesem Gerät gespeichert. Anmeldung
+          und Cloud-Sync sind freiwillig.
+        </p>
+      </header>
+      <section>
+        <h2>Lokale Daten</h2>
+        <p>
+          Diese Vorlage enthält einen JSON-Editor für jede deiner Datenarten.
+          Ersetze ihn beim Entwickeln durch die Oberfläche deiner App.
+        </p>
+        <div id="editors"></div>
+        <p id="message" role="status"></p>
+      </section>
+      <section>
+        <h2>Account & Sync</h2>
+        <div id="account"></div>
+      </section>
+    </main>
+  </body>
+</html>

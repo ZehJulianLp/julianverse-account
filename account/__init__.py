@@ -2,7 +2,7 @@ import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from cryptography.fernet import Fernet
 from flask import Flask, g, jsonify, render_template, request
@@ -100,7 +100,18 @@ def create_app(config=None):
     migrate.init_app(app, db, render_as_batch=True)
     csrf.init_app(app)
 
-    from . import admin, auth, browser_sessions, cli, cloud, oidc, pages, passkeys
+    from . import (
+        admin,
+        app_data,
+        auth,
+        browser_sessions,
+        cli,
+        cloud,
+        developer,
+        oidc,
+        pages,
+        passkeys,
+    )
     from .security import load_user
 
     app.before_request(load_user)
@@ -112,11 +123,14 @@ def create_app(config=None):
         passkeys.bp,
         admin.bp,
         browser_sessions.bp,
+        developer.bp,
+        app_data.bp,
     ):
         app.register_blueprint(blueprint)
     auth.init_discord(app)
     oidc.init_server(app)
     cli.init_app(app)
+    app.after_request(developer.record_response)
 
     @app.context_processor
     def context():
@@ -155,7 +169,29 @@ def create_app(config=None):
         # Browsers also apply form-action to redirects after a form submission.
         # Consent and Discord linking must be able to return to registered apps.
         form_origins = {"'self'", "https://discord.com"}
-        for client in db.session.scalars(db.select(Client).where(Client.enabled.is_(True))):
+        clients = list(
+            db.session.scalars(
+                db.select(Client).where(Client.enabled.is_(True), ~Client.developer_app.has())
+            )
+        )
+        # User registrations must not grow every response's CSP beyond proxy limits.
+        # Include only the custom app participating in this authorization flow.
+        identifier = request.args.get("client_id") if request.endpoint == "oidc.authorize" else None
+        target = urlsplit(g.get("csp_next", ""))
+        if (
+            not identifier
+            and not target.netloc
+            and not target.scheme
+            and target.path == "/oauth/authorize"
+        ):
+            identifier = parse_qs(target.query).get("client_id", [None])[0]
+        if identifier:
+            requested_client = db.session.scalar(
+                db.select(Client).where(Client.enabled.is_(True), Client.client_id == identifier)
+            )
+            if requested_client:
+                clients.append(requested_client)
+        for client in clients:
             for uri in client.redirect_uris:
                 parsed = urlsplit(uri)
                 form_origins.add(f"{parsed.scheme}://{parsed.netloc}")

@@ -178,6 +178,7 @@ class CodeGrant(AuthorizationCodeGrant):
             and not browser.revoked
             and browser.expires_at > now()
             and browser.user.enabled
+            and self.request.client.allows_user(browser.user)
             and consent
         ):
             return browser.user
@@ -408,6 +409,8 @@ def authorize():
     if current_app.config["REQUIRE_VERIFIED_EMAIL"] and not g.user.email_verified:
         abort(403, "Bitte bestätige zuerst deine E-Mail-Adresse.")
     scope = grant.request.scope
+    if not grant.request.client.allows_user(g.user):
+        abort(403, "Diese App ist privat, im Testmodus oder nicht mehr verfügbar.")
     if grant.request.client.slug == "owncloud":
         from .provisioning import sso_username
 

@@ -1184,3 +1184,9 @@ footer {
     right: 22px;
   }
 }
+
+/* Developer forms share the account controls and remain usable on small screens. */
+textarea { width: 100%; min-height: 96px; resize: vertical; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--input); color: inherit; font: inherit; }
+.resource-editor { margin: 16px 0; }
+details > summary { cursor: pointer; margin: 16px 0; }
+.card pre { max-width: 100%; overflow-x: auto; }

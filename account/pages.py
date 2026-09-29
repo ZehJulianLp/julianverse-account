@@ -28,6 +28,7 @@ from .models import (
     Client,
     CloudConnection,
     Consent,
+    DeveloperApp,
     DiscordIdentity,
     OAuthToken,
     Passkey,
@@ -231,11 +232,15 @@ def connections():
 @bp.get("/apps")
 @login_required
 def applications():
-    rows = db.session.execute(
-        db.select(Consent, Client)
-        .join(Client, Client.client_id == Consent.client_id)
-        .where(Consent.user_id == g.user.id)
-    ).all()
+    from .app_data import associated_clients
+
+    consents = {
+        c.client_id: c
+        for c in db.session.scalars(db.select(Consent).where(Consent.user_id == g.user.id))
+    }
+    rows = [
+        (consents.get(c.client_id), c) for c in db.session.scalars(associated_clients(g.user.id))
+    ]
     return render_template("applications.html", applications=rows)
 
 
@@ -317,6 +322,30 @@ def export_account():
         "applications": [
             {"client_id": c.client_id, "scopes": c.scopes}
             for c in db.session.scalars(db.select(Consent).where(Consent.user_id == user.id))
+        ],
+        "created_apps": [
+            {
+                "id": a.client.slug,
+                "name": a.client.client_name,
+                "website": a.website,
+                "description": a.description,
+                "visibility": a.visibility,
+                "test_mode": a.test_mode,
+                "deleted_at": a.deleted_at,
+                "redirect_uris": a.client.redirect_uris,
+                "resources": [
+                    {
+                        "key": r.key,
+                        "label": r.label,
+                        "description": r.description,
+                        "enabled": r.enabled,
+                    }
+                    for r in a.resources
+                ],
+            }
+            for a in db.session.scalars(
+                db.select(DeveloperApp).where(DeveloperApp.owner_id == user.id)
+            )
         ],
         "note": "Synchronisierte App-Inhalte liegen in deinem ownCloud-Ordner Julianverse. Lade sie dort direkt herunter.",
     }

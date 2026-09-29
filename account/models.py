@@ -156,6 +156,26 @@ class Client(db.Model, OAuth2ClientMixin):
     slug = db.Column(db.String(40), unique=True, nullable=False)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
     client_id = db.Column(db.String(48), unique=True, nullable=False)
+    developer_app = db.relationship("DeveloperApp", uselist=False, back_populates="client")
+
+    def allows_user(self, user):
+        app = self.developer_app
+        return bool(
+            self.enabled
+            and (
+                app is None
+                or (
+                    not app.deleted_at
+                    and app.owner
+                    and app.owner.enabled
+                    and user
+                    and (
+                        app.owner_id == user.id
+                        or (app.visibility == "unlisted" and not app.test_mode)
+                    )
+                )
+            )
+        )
 
     def get_allowed_scope(self, scope):
         allowed = super().get_allowed_scope(scope)
@@ -233,6 +253,7 @@ class OAuthToken(db.Model):
             or not self.user.enabled
             or not self.client
             or not self.client.enabled
+            or not self.client.allows_user(self.user)
             or not s
             or s.revoked
             or s.expires_at <= now()
@@ -245,3 +266,43 @@ class AppBrowserSession(db.Model):
     token = db.relationship(OAuthToken)
     origin = db.Column(db.String(255), nullable=False)
     expires_at = db.Column(db.Integer, nullable=False, index=True)
+
+
+class DeveloperApp(db.Model):
+    client_id = db.Column(db.ForeignKey("client.client_id", ondelete="CASCADE"), primary_key=True)
+    owner_id = db.Column(db.ForeignKey("user.id", ondelete="SET NULL"), nullable=True, index=True)
+    owner = db.relationship(User)
+    client = db.relationship(Client, back_populates="developer_app")
+    description = db.Column(db.String(500), nullable=False, default="")
+    website = db.Column(db.String(2048), nullable=False)
+    icon = db.Column(db.String(24), nullable=False, default="puzzle")
+    visibility = db.Column(db.String(16), nullable=False, default="private")
+    test_mode = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.Integer, nullable=False, default=now)
+    deleted_at = db.Column(db.Integer, nullable=True)
+    read_count = db.Column(db.Integer, nullable=False, default=0)
+    write_count = db.Column(db.Integer, nullable=False, default=0)
+    last_used = db.Column(db.Integer, nullable=True)
+    resources = db.relationship("AppResource", order_by="AppResource.id")
+
+
+class AppResource(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(
+        db.ForeignKey("developer_app.client_id", ondelete="CASCADE"), nullable=False
+    )
+    key = db.Column(db.String(60), nullable=False)
+    label = db.Column(db.String(80), nullable=False)
+    description = db.Column(db.String(240), nullable=False, default="")
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+    __table_args__ = (UniqueConstraint("client_id", "key"),)
+
+
+class AppError(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(
+        db.ForeignKey("developer_app.client_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    operation = db.Column(db.String(24), nullable=False)
+    status = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.Integer, nullable=False, default=now)

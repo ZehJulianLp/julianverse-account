@@ -20,7 +20,7 @@ def allowed_client(slug):
     )
     if (
         not client
-        or slug not in ("startpage", "weather", "searxng", "news")
+        or (slug not in ("startpage", "weather", "searxng", "news") and not client.developer_app)
         or client.token_endpoint_auth_method != "none"
     ):
         abort(403)
@@ -57,6 +57,7 @@ def revoke(record):
 @csrf.exempt
 def browser_session(slug):
     client = allowed_client(slug)
+    same_site = "None" if client.developer_app else "Lax"
     if request.method == "OPTIONS":
         return "", 204
     # Exact registered Origin plus a non-simple header prevent cross-site and form CSRF.
@@ -81,7 +82,7 @@ def browser_session(slug):
             db.session.commit()
         response = jsonify(ok=True)
         response.delete_cookie(
-            cookie, path=request.path, secure=True, httponly=True, samesite="Lax"
+            cookie, path=request.path, secure=True, httponly=True, samesite=same_site
         )
         return response
     if action == "remember":
@@ -167,6 +168,6 @@ def browser_session(slug):
             path=request.path,
             secure=True,
             httponly=True,
-            samesite="Lax",
+            samesite=same_site,
         )
     return response

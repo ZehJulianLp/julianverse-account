@@ -32,9 +32,9 @@
           </form>
           <p class="nav-label">DEIN BEREICH</p>
           <nav aria-label="Kontoverwaltung">
-            {% for endpoint,label,icon in [('pages.dashboard','Übersicht','◈'),('pages.profile','Profil','○'),('pages.security','Sicherheit','◇'),('pages.connections','Verbindungen','⇄'),('pages.applications','Apps & Zugriff','▦'),('cloud.settings','Cloud-Sync','☁'),('pages.privacy','Daten & Datenschutz','▤')] %}
+            {% for endpoint,label,icon in [('pages.dashboard','Übersicht','◈'),('pages.profile','Profil','○'),('pages.security','Sicherheit','◇'),('pages.connections','Verbindungen','⇄'),('pages.applications','Apps & Zugriff','▦'),('developer.index','Meine Apps','⌘'),('cloud.settings','Cloud-Sync','☁'),('pages.privacy','Daten & Datenschutz','▤')] %}
               <a href="{{ url_for(endpoint) }}"
-                 {% if request.endpoint == endpoint %}aria-current="page"{% endif %}><span aria-hidden="true">{{ icon }}</span>{{ label }}</a>
+                 {% if request.endpoint == endpoint or (endpoint == 'developer.index' and request.blueprint == 'developer') %}aria-current="page"{% endif %}><span aria-hidden="true">{{ icon }}</span>{{ label }}</a>
             {% endfor %}
             {% if current_user.is_admin %}<a href="{{ url_for('admin.index') }}" {% if request.blueprint == 'admin' %}aria-current="page"{% endif %}><span aria-hidden="true">⚙</span>Verwaltung</a>{% endif %}
           </nav>
