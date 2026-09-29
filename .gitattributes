@@ -1,0 +1,2 @@
+# Unified patches include a space on empty context lines.
+integrations/news/host.patch -whitespace

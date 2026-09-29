@@ -20,7 +20,7 @@ def allowed_client(slug):
     )
     if (
         not client
-        or slug not in ("startpage", "weather", "searxng")
+        or slug not in ("startpage", "weather", "searxng", "news")
         or client.token_endpoint_auth_method != "none"
     ):
         abort(403)

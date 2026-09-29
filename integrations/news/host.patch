@@ -1,0 +1,189 @@
+--- a/README.md
++++ b/README.md
+@@ -59,9 +59,13 @@
+ Dateien einer neuen Version veröffentlichen: Der Worker installiert den
+ App-Cache vollständig oder verwirft die Installation.
+ 
+-## Speicherung und späterer Account-Sync
++## Speicherung und optionaler Account-Sync
+ 
+-Die Anwendung speichert nur lokal. Sie stellt keine Account-Verbindung her.
++Die Anwendung bleibt ohne Anmeldung lokal nutzbar. Unter **Account & Sync** in
++der Übersicht sowie **Aa → Account & Sync** auf der Leseseite kannst du dich mit
++Julianverse anmelden. Quellen, Leseliste, Gelesen-Status und Einstellungen werden
++getrennt freigegeben und erst nach ausdrücklicher Wahl der ersten Übertragung
++mit ownCloud abgeglichen. Anmeldung und Auswahl bleiben nach Neuladen erhalten.
+ `storage.js` trennt das versionierte Nutzerdokument von ersetzbaren Feed-Daten:
+ 
+ | localStorage-Schlüssel | Inhalt |
+@@ -70,9 +74,13 @@
+ | `julianverse.news.cache.v1` | Feed-Vorschauen und Aktualisierungszeitpunkt je Quelle |
+ | `julianverse.news.articles.v1` | Höchstens 25 zuletzt geöffnete Artikeltexte, bei Platzmangel weniger |
+ 
+-Für Account-Sync kann später ein Adapter das Nutzerdokument lesen/schreiben und
+-das Ereignis `julianverse:news-change` verwenden. Authentifizierung, Merge-Regeln,
+-Löschmarkierungen und Konfliktbehandlung müssen dafür noch ergänzt werden.
++Der Account-Adapter verwendet das Ereignis `julianverse:news-change` und ersetzt
++bei Cloud-Importen nur die gewählte Kategorie. Die Dateien liegen unter
++`Julianverse/news/` in ownCloud. ETags schützen vor unbemerktem Überschreiben;
++bei parallelen Änderungen kannst du die lokale oder die Cloud-Version wählen.
++Vor Importen wird die jeweilige lokale Kategorie gesichert. Bis zu 8 MiB pro
++Cloud-Datei; größere lokale Daten werden nicht stillschweigend gekürzt.
++Feed-Cache, vollständige Artikeltexte und Sitzungsspeicher bleiben lokal.
+ Startpage-Schlüssel werden nicht verändert. Änderungen des Nutzerdokuments
+ werden zwischen geöffneten Tabs übernommen.
+ 
+@@ -156,3 +164,14 @@
+ 
+ Die Bibliotheken und Schriften werden lokal ausgeliefert und im PWA-App-Cache
+ gespeichert. Zur Laufzeit ist kein CDN erforderlich.
++
++## Account-Integration betreiben
++
++Die kanonischen Module und Einbauhinweise liegen unter
++`/home/srvmgr/sso/integrations/news/`. Der Service Worker v12 enthält die Account-Module
++für Offline-Nutzung; Auth-Callbacks werden nie gecacht. Den Nginx-Schritt einmalig
++mit `sudo bash /home/srvmgr/sso/scripts/setup-news-proxy.sh` ausführen.
++Nach einem PWA-Update das Angebot **Jetzt aktualisieren** annehmen.
++
++Für diese Integration wurden nur leichte Daten-/API- und Syntaxprüfungen ausgeführt.
++Der abschließende Browser-Test wird vom Betreiber durchgeführt.
+--- a/app.js
++++ b/app.js
+@@ -777,3 +777,16 @@
+ if (returnView) requestAnimationFrame(() => scrollTo({ top: Number(returnView.scroll) || 0, behavior: 'instant' }));
+ void refresh();
+ void registerPwa();
++
++// Optional Account integration. Apply only the imported category without saving it again.
++window.julianverseApply = (resource) => {
++  const sourcesBefore = JSON.stringify(state.sources);
++  state = loadState();
++  if (!state.sources.some(source => source.id === sourceFilter && source.enabled !== false)) sourceFilter = '';
++  applyTheme();
++  if (resource === 'sources') renderSources();
++  render();
++  if (resource === 'sources' && JSON.stringify(state.sources) !== sourcesBefore) void refresh();
++};
++window.julianverseReady = true;
++window.dispatchEvent(new Event('julianverse:ready'));
+--- a/index.html
++++ b/index.html
+@@ -13,6 +13,9 @@
+   <link rel="manifest" href="manifest.webmanifest">
+   <link rel="stylesheet" href="styles.css">
+   <script type="module" src="app.js"></script>
++  <link rel="stylesheet" href="account/panel.css">
++  <link rel="stylesheet" href="account/news.css">
++  <script type="module" src="account/app.mjs"></script>
+ </head>
+ <body>
+   <a class="skip-link" href="#main">Zu den Nachrichten</a>
+@@ -52,7 +55,7 @@
+         <div class="source-heading"><p class="section-label">DEINE QUELLEN</p><button class="icon-button" data-open-sources title="Quellen verwalten" aria-label="Quellen verwalten"><svg class="icon"><use href="#i-plus"/></svg></button></div>
+         <div id="source-nav" class="source-nav" aria-label="Quellen · mit Griffen verschiebbar"></div>
+         <button class="add-source" data-open-sources><svg class="icon"><use href="#i-plus"/></svg>Quelle hinzufügen</button>
+-        <div class="sidebar-note"><span class="local-dot"></span><span>Dein Reader, auf diesem Gerät.<small>Quellen &amp; Leseliste lokal gespeichert.</small></span></div>
++        <div class="sidebar-note"><span class="local-dot"></span><span>Dein Reader, auf diesem Gerät.<small>Lokal gespeichert. Cloud-Sync ist freiwillig.</small></span></div>
+       </div>
+       <a class="startpage-link" href="../startpage/"><svg class="icon"><use href="#i-back"/></svg>Zur Startpage<svg class="icon trailing"><use href="#i-arrow"/></svg></a>
+     </aside>
+@@ -60,6 +63,7 @@
+       <header class="topbar">
+         <span class="today" id="today"></span>
+         <div class="topbar-actions">
++          <button class="button small" type="button" data-open-account>Account &amp; Sync</button>
+           <span class="connection-status" id="connection-status"><span class="local-dot"></span>Online</span>
+           <button class="button small" id="install" hidden><svg class="icon"><use href="#i-download"/></svg>Installieren</button>
+           <button class="icon-button" id="theme-toggle" title="Farbschema wechseln" aria-label="Farbschema wechseln"><svg class="icon"><use href="#i-sun"/></svg></button>
+@@ -135,5 +139,10 @@
+   </dialog>
+   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+   <noscript><div class="noscript">Bitte aktiviere JavaScript, um Feeds zu laden und deinen Reader zu nutzen.</div></noscript>
++  <dialog id="news-account-dialog" class="news-account-dialog" aria-labelledby="news-account-title">
++    <div class="news-account-heading"><div><h2 id="news-account-title">Account &amp; Cloud-Sync</h2><p>Deine News auf deinen Geräten. Du wählst, welche Daten mit deiner ownCloud abgeglichen werden.</p></div><button class="icon-button" type="button" data-close-account aria-label="Account-Bereich schließen">×</button></div>
++    <div id="julianverse-account" class="jv-account"><p>Deine Daten bleiben lokal. Anmeldung und Sync sind freiwillig.</p></div>
++    <p class="muted">Quellen, Leseliste, Gelesen-Status und Einstellungen lassen sich getrennt freigeben. Vollständige Artikeltexte, Feed-Cache und die aktuelle Leseposition bleiben auf diesem Gerät.</p>
++  </dialog>
+ </body>
+ </html>
+--- a/reader.html
++++ b/reader.html
+@@ -12,6 +12,9 @@
+   <link rel="stylesheet" href="styles.css">
+   <link rel="stylesheet" href="reader.css">
+   <script type="module" src="reader.js"></script>
++  <link rel="stylesheet" href="account/panel.css">
++  <link rel="stylesheet" href="account/news.css">
++  <script type="module" src="account/app.mjs"></script>
+ </head>
+ <body class="reading-page">
+   <a class="skip-link" href="#reader-content">Zum Artikeltext</a>
+@@ -35,6 +38,7 @@
+       <details class="reading-settings" id="reading-settings">
+         <summary class="icon-button" aria-label="Leseeinstellungen" title="Leseeinstellungen">Aa</summary>
+         <div class="reading-settings-panel">
++          <button class="chip" type="button" data-open-account>Account &amp; Sync</button>
+           <label for="reader-font-size">Schriftgröße <output id="font-size-value" for="reader-font-size">19 px</output></label>
+           <input id="reader-font-size" type="range" min="16" max="26" step="1" value="19">
+           <label for="reader-font">Schrift</label><select id="reader-font"><option value="sans">Klar</option><option value="serif">Buch</option></select>
+@@ -75,5 +79,10 @@
+   <button id="reader-top" class="icon-button reader-top" aria-label="Zum Artikelanfang" title="Zum Artikelanfang" hidden><svg class="icon"><use href="#i-up"/></svg></button>
+   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+   <noscript><div class="noscript">Bitte aktiviere JavaScript, um Artikel zu lesen.</div></noscript>
++  <dialog id="news-account-dialog" class="news-account-dialog" aria-labelledby="news-account-title">
++    <div class="news-account-heading"><div><h2 id="news-account-title">Account &amp; Cloud-Sync</h2><p>Deine News auf deinen Geräten. Du wählst, welche Daten mit deiner ownCloud abgeglichen werden.</p></div><button class="icon-button" type="button" data-close-account aria-label="Account-Bereich schließen">×</button></div>
++    <div id="julianverse-account" class="jv-account"><p>Deine Daten bleiben lokal. Anmeldung und Sync sind freiwillig.</p></div>
++    <p class="muted">Quellen, Leseliste, Gelesen-Status und Einstellungen lassen sich getrennt freigeben. Vollständige Artikeltexte, Feed-Cache und die aktuelle Leseposition bleiben auf diesem Gerät.</p>
++  </dialog>
+ </body>
+ </html>
+--- a/reader.js
++++ b/reader.js
+@@ -367,3 +367,13 @@
+ applyPreferences();
+ showArticle(new URL(location.href).searchParams.get('article'), { restore: true });
+ void registerPwa();
++
++// Keep saved/read controls and reading preferences in sync without resetting the article position.
++window.julianverseApply = () => {
++  state = loadState();
++  applyPreferences();
++  renderActions();
++  updateProgress();
++};
++window.julianverseReady = true;
++window.dispatchEvent(new Event('julianverse:ready'));
+--- a/storage.js
++++ b/storage.js
+@@ -1,5 +1,5 @@
+-// User data is separate from the disposable feed cache. A future account adapter
+-// can sync the versioned user document without uploading downloaded feed contents.
++// User data is separate from the disposable feed cache. The optional Account
++// adapter syncs selected categories without uploading full article HTML or the cache.
+ export const STATE_KEY = 'julianverse.news.state.v1';
+ const CACHE_KEY = 'julianverse.news.cache.v1';
+ export function portableArticle(article) {
+--- a/sw.js
++++ b/sw.js
+@@ -1,9 +1,10 @@
+ const CACHE_PREFIX = 'julianverse-news-shell-';
+-const CACHE_NAME = `${CACHE_PREFIX}v11`;
++const CACHE_NAME = `${CACHE_PREFIX}v12`;
+ const APP_ROOT = new URL('./', self.location.href);
+ const FILES = ['./', './index.html', './styles.css', './app.js', './storage.js', './feeds.js', './recommendations.js', './article.js', './vendor/Readability.js', './vendor/purify.es.js', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png'];
+ FILES.push('./assets/fonts/Inter-400.ttf', './assets/fonts/Inter-600.ttf');
+ FILES.push('./reader.html', './reader.css', './reader.js', './reading-state.js', './pwa.js');
++FILES.push('./account/app.mjs', './account/adapter.mjs', './account/config.mjs', './account/panel.mjs', './account/panel.css', './account/news.css', './account/data.mjs', './account/session.mjs', './account/sync.mjs', './account/oidc-client.mjs', './account/callback.mjs');
+ const SHELL_URLS = new Set(FILES.map(path => new URL(path, APP_ROOT).href));
+ 
+ self.addEventListener('install', event => {
+@@ -26,6 +27,8 @@
+   if (event.request.method !== 'GET') return;
+   const url = new URL(event.request.url);
+   if (url.origin !== APP_ROOT.origin || !url.pathname.startsWith(APP_ROOT.pathname)) return;
++  // OAuth codes must bypass the cached app shell and must never enter a cache.
++  if (url.pathname === new URL('./account-callback.html', APP_ROOT).pathname || url.searchParams.has('code') || url.searchParams.has('state')) return;
+   // Versioned shell stays consistent until the user accepts the next worker.
+   // RSS results are kept per source by storage.js, including per-source dates.
+   if (event.request.mode === 'navigate') {

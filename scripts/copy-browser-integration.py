@@ -8,7 +8,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("app", choices=["startpage", "weather"])
+parser.add_argument("app", choices=["startpage", "weather", "news"])
 parser.add_argument("checkout", type=Path)
 parser.add_argument("--client-id", required=True)
 args = parser.parse_args()
@@ -18,6 +18,9 @@ for name in ("panel.mjs", "panel.css", "callback.mjs", "app.mjs", "data.mjs", "s
     shutil.copyfile(root / "integrations/browser" / name, target / name)
 for name in ("sync.mjs", "oidc-client.mjs"):
     shutil.copyfile(root / "account/static/js" / name, target / name)
+if args.app == "news":
+    shutil.copyfile(root / "integrations/news/app.mjs", target / "app.mjs")
+    shutil.copyfile(root / "integrations/news/news.css", target / "news.css")
 adapter = (root / "integrations" / args.app / "adapter.mjs").read_text()
 (target / "adapter.mjs").write_text(adapter.replace("../browser/data.mjs", "./data.mjs"))
 (target / "config.mjs").write_text(
@@ -27,6 +30,7 @@ adapter = (root / "integrations" / args.app / "adapter.mjs").read_text()
             "issuer": "https://account.julianverse.de",
             "app": args.app,
             "clientId": args.client_id,
+            **({"scope": "openid profile sync"} if args.app == "news" else {}),
         },
         indent=2,
     )

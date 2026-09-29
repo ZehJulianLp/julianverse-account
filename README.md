@@ -41,6 +41,10 @@ und ownCloud-Sync. Datenzuordnung, Bedienung und Einbauhinweise liegen unter
 [integrations/weather](integrations/weather/README.md). Die Account-Installation
 verändert diese statischen Apps nicht automatisch; die Module werden mit den
 jeweiligen App-Checkouts ausgeliefert.
+Julianverse News nutzt unter `/news/` dieselbe freiwillige Anmeldung mit getrennten
+Freigaben für Quellen, Leseliste, Gelesen-Status und Leseeinstellungen.
+[Einrichtung und Datenzuordnung](integrations/news/README.md); der Account-Bereich
+ist in der Übersicht und auf der Leseseite erreichbar.
 SearXNG erhält mit [integrations/searxng](integrations/searxng/README.md) einen
 optionalen Bereich **Meine Suche** für gespeicherte Suchen, pausierbaren Verlauf
 und den Abgleich der Sucheinstellungen. `scripts/setup-searxng.sh` erweitert den

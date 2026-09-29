@@ -43,6 +43,15 @@ CATALOG = {
         },
     },
     "weather": {"name": "Wetter", "resources": {"settings": "Einstellungen", "locations": "Orte"}},
+    "news": {
+        "name": "Julianverse News",
+        "resources": {
+            "sources": "Quellen & Reihenfolge",
+            "saved": "Leseliste",
+            "read": "Gelesen-Status",
+            "settings": "Ansicht & Leseeinstellungen",
+        },
+    },
     "searxng": {
         "name": "Julianverse Search",
         "resources": {
@@ -53,6 +62,7 @@ CATALOG = {
     },
 }
 MAX_BYTES = 512 * 1024
+NEWS_MAX_BYTES = 8 * 1024 * 1024
 
 
 def revoke_sync_access(user_id):
@@ -91,7 +101,7 @@ def dav_url(connection, app_slug=None, resource=None):
     return base
 
 
-def dav(connection, method, url, **kwargs):
+def dav(connection, method, url, *, max_bytes=MAX_BYTES, **kwargs):
     attempts = 2 if method.upper() in ("GET", "HEAD", "PROPFIND") else 1
     for attempt in range(attempts):
         try:
@@ -108,10 +118,10 @@ def dav(connection, method, url, **kwargs):
                     chunks, length = [], 0
                     for chunk in response.iter_bytes():
                         length += len(chunk)
-                        if length > MAX_BYTES:
+                        if length > max_bytes:
                             abort(
                                 502,
-                                "Die ownCloud-Datei überschreitet die unterstützte Größe von 512 KiB.",
+                                f"Die ownCloud-Datei überschreitet die unterstützte Größe von {max_bytes // 1024} KiB.",
                             )
                         chunks.append(chunk)
                     # iter_bytes() already decompresses the body. Reusing the wire
@@ -406,9 +416,11 @@ def sync(app_slug, resource):
     )
     if not pref or not pref.enabled:
         abort(403, "Sync für diese Daten ist ausgeschaltet.")
+    max_bytes = NEWS_MAX_BYTES if app_slug == "news" else MAX_BYTES
+    request.max_content_length = max_bytes
     url = dav_url(connection, app_slug, resource)
     if request.method == "GET":
-        result = dav(connection, "GET", url)
+        result = dav(connection, "GET", url, max_bytes=max_bytes)
         if result.status_code == 404:
             return {"error": "not_found"}, 404
         if result.status_code != 200:
@@ -425,8 +437,8 @@ def sync(app_slug, resource):
     payload = request.get_json()
     validate_document(payload)
     content = json.dumps(payload, ensure_ascii=False).encode()
-    if len(content) > MAX_BYTES:
-        abort(413)
+    if len(content) > max_bytes:
+        abort(413, "Diese Sync-Datei ist zu groß. Deine lokalen Daten bleiben erhalten.")
     match, create = request.headers.get("If-Match"), request.headers.get("If-None-Match")
     if (
         bool(match) == bool(create)
