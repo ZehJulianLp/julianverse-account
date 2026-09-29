@@ -71,7 +71,7 @@ Prüfungen ohne Browser:
 node --test tests/sdk.test.mjs tests/sync.test.mjs
 ```
 
-### Noch separat einzurichten
+### Einrichtung der externen Dienste
 
 Discord benötigt eine OAuth-Anwendung. SMTP braucht einen funktionierenden
 Mailzugang. Die eigene ownCloud-Installation wird mit `scripts/setup-owncloud.sh`
@@ -323,7 +323,9 @@ Für eine Browser-App:
 Für eine Flask-App `--public` weglassen. Das erzeugte Client-Secret erscheint
 einmalig und wird in der Datenbank ausschließlich als Hash gespeichert.
 Jede Redirect-URL muss exakt passen. S256-PKCE ist auch bei vertraulichen Clients
-Pflicht. Keine Wildcards, kein Implicit- oder Password-Grant, keine dynamische Registrierung.
+Pflicht. Keine Wildcards, kein Implicit- oder Password-Grant. Eigene öffentliche
+Browser-Clients können angemeldete Nutzer unter **Meine Apps** registrieren.
+Einen OIDC-Endpunkt für automatische Client-Registrierung gibt es nicht.
 
 | Zweck | URL |
 | --- | --- |
@@ -368,8 +370,9 @@ Julianverse/weather/locations.json
 ```
 
 Die jeweilige App definiert das Format von `data`. Die maximale Dateigröße beträgt
-512 KiB. Dateien lassen sich direkt in ownCloud bearbeiten, solange das Format
-erhalten bleibt. Bilder und größere Dateien werden direkt über ownCloud verwaltet.
+512 KiB, bei Julianverse News 8 MiB. Dateien lassen sich direkt in ownCloud bearbeiten,
+solange das Format erhalten bleibt. Bilder und größere Dateien werden direkt über
+ownCloud verwaltet.
 
 `GET /api/sync/APP/RESOURCE` liefert JSON und ETag. Ein `PUT` braucht entweder
 `If-Match: "gelesene-version"` oder `If-None-Match: *`. Ein Konflikt ergibt 412;
